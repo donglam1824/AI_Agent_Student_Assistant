@@ -19,13 +19,13 @@ Usage:
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agents.calendar.nodes import make_reason_node, should_continue
 from agents.calendar.state import CalendarAgentState
 from config.settings import settings
+from core.llm_manager import llm_manager
 from core.logger import logger
 from tools.calendar.list_events import list_calendar_events
 from tools.calendar.create_event import create_calendar_event
@@ -60,14 +60,14 @@ class CalendarAgent:
     """
 
     def __init__(self) -> None:
-        self._llm = ChatOpenAI(
-            model=settings.openai_model,
-            temperature=0,
-            api_key=settings.openai_api_key,
+        self._llm_with_tools = llm_manager.get_with_tools(
+            task="calendar",
+            tools=CALENDAR_TOOLS,
         )
-        self._llm_with_tools = self._llm.bind_tools(CALENDAR_TOOLS)
         self._graph = self._build_graph()
-        logger.info("CalendarAgent initialized.")
+        logger.info(
+            f"CalendarAgent initialized – LLM info: {llm_manager.info()}"
+        )
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(CalendarAgentState)

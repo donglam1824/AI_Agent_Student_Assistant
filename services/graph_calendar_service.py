@@ -207,10 +207,32 @@ class GraphCalendarService(BaseCalendarService):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_calendar_service() -> BaseCalendarService:
-    """Factory: returns Mock or real service based on settings.mock_graph."""
+    """
+    Factory: returns the correct calendar service based on settings.calendar_provider.
+
+    CALENDAR_PROVIDER values:
+      "mock"     → MockCalendarService (in-memory, no credentials needed)
+      "google"   → GoogleCalendarService (Google Calendar via OAuth2)
+      "msgraph"  → GraphCalendarService (Microsoft 365 via Azure)
+    """
     from config.settings import settings
-    if settings.mock_graph:
-        logger.info("Using MockCalendarService (MOCK_GRAPH=True)")
+
+    provider = settings.calendar_provider.lower().strip()
+
+    if provider == "mock" or settings.mock_graph:
+        logger.info("Using MockCalendarService (provider=mock or MOCK_GRAPH=True)")
         return MockCalendarService()
-    logger.info("Using GraphCalendarService (real MS Graph)")
-    return GraphCalendarService()
+
+    if provider == "google":
+        logger.info("Using GoogleCalendarService (provider=google)")
+        from services.google_calendar_service import GoogleCalendarService
+        return GoogleCalendarService()
+
+    if provider == "msgraph":
+        logger.info("Using GraphCalendarService (provider=msgraph)")
+        return GraphCalendarService()
+
+    raise ValueError(
+        f"Unknown CALENDAR_PROVIDER={provider!r}. "
+        "Choose from: 'mock', 'google', 'msgraph'"
+    )
