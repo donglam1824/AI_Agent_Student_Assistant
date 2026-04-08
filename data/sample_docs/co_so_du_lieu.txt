@@ -1,0 +1,20 @@
+Môn: Cơ Sở Dữ Liệu
+Nguồn: Sample data
+
+== INDEX (CHỈ MỤC) ==
+
+B-Tree Index:
+- Cấu trúc cây cân bằng, phù hợp cho range queries
+- Dùng khi: cần tìm kiếm theo khoảng (>, <, BETWEEN)
+- Ví dụ: SELECT * FROM students WHERE age > 20
+
+Hash Index:
+- Dùng hash function để ánh xạ key → bucket
+- Dùng khi: chỉ cần equality search (=)
+- Không hỗ trợ range queries
+- Ví dụ: SELECT * FROM users WHERE id = 12345
+
+Khi nào dùng B-Tree thay Hash:
+- Khi query có WHERE với >, <, BETWEEN, LIKE 'abc%'
+- Khi cần ORDER BY hưởng lợi từ index
+- Khi không chắc chắn → dùng B-Tree vì linh hoạt hơn

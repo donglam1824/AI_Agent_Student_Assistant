@@ -1,0 +1,20 @@
+Môn: Giải Tích Cơ Bản
+Nguồn: Sample data
+
+== ĐẠO HÀM ==
+
+Định nghĩa đạo hàm:
+f'(x) = lim[h→0] (f(x+h) - f(x)) / h
+
+Quy tắc tính đạo hàm:
+1. Đạo hàm hằng số: (c)' = 0
+2. Đạo hàm lũy thừa: (x^n)' = n*x^(n-1)
+3. Đạo hàm hàm hợp (Chain Rule): (f∘g)'(x) = f'(g(x)) · g'(x)
+4. Đạo hàm tích: (u·v)' = u'v + uv'
+5. Đạo hàm thương: (u/v)' = (u'v - uv') / v²
+
+Đạo hàm các hàm cơ bản:
+- (sin x)' = cos x
+- (cos x)' = -sin x
+- (e^x)' = e^x
+- (ln x)' = 1/x

@@ -52,7 +52,7 @@ def _get_credentials(credentials_path: str, token_path: str) -> Credentials:
             logger.info("[Google] Refreshing expired token...")
             creds.refresh(Request())
         else:
-            logger.info("[Google] No valid token. Starting OAuth2 flow...")
+            logger.info("[Goog le] No valid token. Starting OAuth2 flow...")
             flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
             try:
                 # Thử mở local server trước
