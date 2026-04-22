@@ -23,9 +23,15 @@ Trợ lý AI thông minh cho sinh viên, xây dựng theo kiến trúc **multi-a
 | Email     | 🔜     | Đọc & soạn email tự động                  |
 | Reminder  | 🔜     | Nhắc nhở theo lịch                         |
 
-## Cài đặt
+## Cài đặt & Chạy ứng dụng
+
+Dự án bao gồm 2 phần chính: **Backend** (FastAPI) và **Frontend** (Next.js).
+
+### 1. Chạy Backend (FastAPI)
 
 ```bash
+cd backend
+
 # 1. Tạo virtual environment
 python -m venv venv
 .\venv\Scripts\Activate.ps1
@@ -35,10 +41,28 @@ pip install -r requirements.txt
 
 # 3. Cấu hình môi trường
 copy .env.example .env
-# Mở .env và điền OPENAI_API_KEY (và Azure credentials nếu dùng Graph thật)
+# Mở .env và điền các API key cần thiết (OPENAI_API_KEY, GEMINI_API_KEY, v.v.)
 
-# 4. Chạy demo
-python main.py
+# 4. Chạy server
+uvicorn main:app --reload --port 8000
+# Backend sẽ chạy tại: http://localhost:8000
+# Hoặc chạy CLI mode: python main.py
+```
+
+### 2. Chạy Frontend (Next.js)
+
+```bash
+cd frontend
+
+# 1. Cài đặt dependencies
+npm install
+
+# 2. Cấu hình môi trường (nếu cần)
+# Mặc định file .env.local đã có NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# 3. Chạy dev server
+npm run dev
+# Frontend sẽ mở tại: http://localhost:3000
 ```
 
 ## Chạy nhanh (Mock mode)
