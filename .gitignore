@@ -209,5 +209,6 @@ __marimo__/
 plans_doc/
 
 # Google OAuth
-token_google.json
+token_google*.json
+token_google_*.json
 client_secret_*.json
