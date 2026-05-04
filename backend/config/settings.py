@@ -36,13 +36,16 @@ class Settings(BaseSettings):
     # Delegated user UPN or object-id (needed for application-level access)
     graph_user_id: str = "me"
 
-    # ── Google Calendar (OAuth2 Desktop) ────────────────────────────────────
-    google_credentials_path: str = "client_secret_1003470466752-rm3jn84p7f34re7e5qcv8dk8ak94f0l0.apps.googleusercontent.com.json"
-    google_token_path: str = "token_google.json"  # auto-generated after first login
-    google_calendar_id: str = "primary"  # 'primary' = default calendar of the logged-in user
+    # ── Google OAuth2 Web Flow ─────────────────────────────────────────────
+    # Client ID và Secret dùng cho server-side authorization code exchange
+    google_client_id: str = ""       # Lấy từ Google Cloud Console (Web app)
+    google_client_secret: str = ""   # Lấy từ Google Cloud Console
+    google_redirect_uri: str = "http://localhost:3000"  # Phải khớp với Google Console
+    google_calendar_id: str = "primary"
 
-    google_token_email_path: str = "token_google_email.json"
-    google_token_note_path: str = "token_google_note.json"
+    # ── Token Encryption ────────────────────────────────────────────────────
+    # Sinh key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    token_encryption_key: str = ""
 
     # ── JWT Authentication ──────────────────────────────────────────────
     jwt_secret_key: str = "orca_super_secret_jwt_key_change_in_production"
@@ -57,7 +60,7 @@ class Settings(BaseSettings):
     # calendar_provider: "mock" | "google" | "msgraph"
     calendar_provider: str = "google"
     email_provider: str = "google"
-    note_provider: str = "sqlite"  # "sqlite" for local storage, "google" for Google Tasks
+    note_provider: str = "google"  # "sqlite" for local storage, "google" for Google Keep
 
 
 

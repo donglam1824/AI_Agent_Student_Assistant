@@ -2,13 +2,14 @@
 tools/calendar/create_event.py
 -------------------------------
 LangChain tool: create a new calendar event.
+Nhận user_id qua LangChain RunnableConfig.
 """
 
 import asyncio
 
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 
-from services.graph_calendar_service import get_calendar_service
 from models.calendar import EventCreate, DateTimeTimeZone
 from core.logger import logger
 
@@ -21,6 +22,7 @@ def create_calendar_event(
     body: str = "",
     location: str = "",
     timezone: str = "Asia/Ho_Chi_Minh",
+    config: RunnableConfig = None,
 ) -> str:
     """
     Tạo một sự kiện mới trên lịch.
@@ -36,7 +38,12 @@ def create_calendar_event(
     Returns:
         Thông báo tạo sự kiện thành công kèm ID.
     """
-    service = get_calendar_service()
+    user_id = (config or {}).get("configurable", {}).get("user_id")
+    if not user_id:
+        return "❌ Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
+
+    from services.google_calendar_service import GoogleCalendarService
+    service = GoogleCalendarService(user_id=user_id)
     data = EventCreate(
         subject=subject,
         start=DateTimeTimeZone(dateTime=start_datetime, timeZone=timezone),
@@ -45,7 +52,7 @@ def create_calendar_event(
         location=location or None,
     )
     event = asyncio.run(service.create_event(data))
-    logger.info(f"Created event: {event.id}")
+    logger.info(f"Created event: {event.id} for user={user_id}")
     return (
         f"✅ Đã tạo sự kiện thành công!\n"
         f"  ID:    {event.id}\n"

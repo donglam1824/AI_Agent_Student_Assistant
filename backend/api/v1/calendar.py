@@ -41,19 +41,23 @@ async def get_events(
     """Get upcoming events from Google Calendar."""
     try:
         from services.google_calendar_service import GoogleCalendarService
-        service = GoogleCalendarService()
-        events = service.list_upcoming_events(max_results=max_results)
+        from datetime import datetime, timedelta, timezone
+        service = GoogleCalendarService(user_id=current_user.id)
+        now = datetime.now(timezone.utc)
+        end = now + timedelta(days=30)
+        import asyncio
+        events = asyncio.run(service.list_events(start=now, end=end))
 
         return [
             CalendarEvent(
-                id=e.get("id", ""),
-                summary=e.get("summary", "Không có tiêu đề"),
-                start=e.get("start", {}).get("dateTime", e.get("start", {}).get("date", "")),
-                end=e.get("end", {}).get("dateTime", e.get("end", {}).get("date", "")),
-                location=e.get("location"),
-                description=e.get("description"),
+                id=e.id,
+                summary=e.subject,
+                start=e.start.dateTime,
+                end=e.end.dateTime,
+                location=e.location,
+                description=e.body,
             )
-            for e in events
+            for e in events[:max_results]
         ]
     except Exception as e:
         logger.error(f"Calendar API error: {e}")
@@ -67,28 +71,27 @@ async def create_event(
 ):
     """Create a new event in Google Calendar."""
     try:
+        import asyncio
         from services.google_calendar_service import GoogleCalendarService
-        service = GoogleCalendarService()
+        from models.calendar import EventCreate, DateTimeTimeZone
+        service = GoogleCalendarService(user_id=current_user.id)
 
-        event_body = {
-            "summary": event.summary,
-            "start": {"dateTime": event.start, "timeZone": "Asia/Ho_Chi_Minh"},
-            "end": {"dateTime": event.end, "timeZone": "Asia/Ho_Chi_Minh"},
-        }
-        if event.location:
-            event_body["location"] = event.location
-        if event.description:
-            event_body["description"] = event.description
-
-        created = service.create_event(event_body)
+        data = EventCreate(
+            subject=event.summary,
+            start=DateTimeTimeZone(dateTime=event.start, timeZone="Asia/Ho_Chi_Minh"),
+            end=DateTimeTimeZone(dateTime=event.end, timeZone="Asia/Ho_Chi_Minh"),
+            body=event.description,
+            location=event.location,
+        )
+        created = asyncio.run(service.create_event(data))
 
         return CalendarEvent(
-            id=created.get("id", ""),
-            summary=created.get("summary", ""),
-            start=created.get("start", {}).get("dateTime", ""),
-            end=created.get("end", {}).get("dateTime", ""),
-            location=created.get("location"),
-            description=created.get("description"),
+            id=created.id,
+            summary=created.subject,
+            start=created.start.dateTime,
+            end=created.end.dateTime,
+            location=created.location,
+            description=created.body,
         )
     except Exception as e:
         logger.error(f"Calendar create error: {e}")

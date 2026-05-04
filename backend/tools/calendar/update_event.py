@@ -2,14 +2,15 @@
 tools/calendar/update_event.py
 -------------------------------
 LangChain tool: update an existing calendar event.
+Nhận user_id qua LangChain RunnableConfig.
 """
 
 import asyncio
 from typing import Optional
 
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 
-from services.graph_calendar_service import get_calendar_service
 from models.calendar import EventUpdate, DateTimeTimeZone
 from core.logger import logger
 
@@ -23,6 +24,7 @@ def update_calendar_event(
     body: str = "",
     location: str = "",
     timezone: str = "Asia/Ho_Chi_Minh",
+    config: RunnableConfig = None,
 ) -> str:
     """
     Cập nhật thông tin một sự kiện lịch theo ID.
@@ -35,11 +37,13 @@ def update_calendar_event(
         body: Mô tả mới (để trống nếu không đổi).
         location: Địa điểm mới (để trống nếu không đổi).
         timezone: Múi giờ (mặc định Asia/Ho_Chi_Minh).
-
-    Returns:
-        Kết quả cập nhật.
     """
-    service = get_calendar_service()
+    user_id = (config or {}).get("configurable", {}).get("user_id")
+    if not user_id:
+        return "❌ Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
+
+    from services.google_calendar_service import GoogleCalendarService
+    service = GoogleCalendarService(user_id=user_id)
     data = EventUpdate(
         subject=subject or None,
         start=DateTimeTimeZone(dateTime=start_datetime, timeZone=timezone) if start_datetime else None,
@@ -48,7 +52,7 @@ def update_calendar_event(
         location=location or None,
     )
     updated = asyncio.run(service.update_event(event_id, data))
-    logger.info(f"Updated event: {updated.id}")
+    logger.info(f"Updated event: {updated.id} for user={user_id}")
     return (
         f"✅ Đã cập nhật sự kiện!\n"
         f"  ID:    {updated.id}\n"

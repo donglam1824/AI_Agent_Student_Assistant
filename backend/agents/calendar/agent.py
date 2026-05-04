@@ -2,20 +2,8 @@
 agents/calendar/agent.py
 -------------------------
 CalendarAgent – LangGraph ReAct-style agent for calendar operations.
-
-Graph topology:
-  START
-    ↓
-  [reason]  ←────────────────┐
-    ↓ (tool_calls?)          │
-  [tools]  ──────────────────┘  (loop until no tool calls)
-    ↓ (no tool_calls)
-  END
-
-Usage:
-    agent = CalendarAgent()
-    response = agent.run("Tôi có lịch gì trong tuần này?")
-    print(response)
+Nhận user_id và inject vào RunnableConfig khi invoke graph,
+để các tools có thể truy cập thông tin người dùng.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -55,50 +43,32 @@ CALENDAR_TOOLS = [
 
 class CalendarAgent:
     """
-    LangGraph-based Calendar Agent.
-
-    Extend this pattern for other modules (NotesAgent, EmailAgent, etc.)
-    by following the same agents/<module>/ structure.
+    LangGraph-based Calendar Agent – hỗ trợ đa người dùng qua user_id.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, user_id: str) -> None:
+        self._user_id = user_id
         self._llm_with_tools = llm_manager.get_with_tools(
             task="calendar",
             tools=CALENDAR_TOOLS,
         )
         self._graph = self._build_graph()
-        logger.info(
-            f"CalendarAgent initialized – LLM info: {llm_manager.info()}"
-        )
+        logger.info(f"CalendarAgent initialized for user={user_id}")
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(CalendarAgentState)
-
-        # Nodes
         builder.add_node("reason", make_reason_node(self._llm_with_tools))
         builder.add_node("tools", ToolNode(CALENDAR_TOOLS))
-
-        # Edges
         builder.add_edge(START, "reason")
         builder.add_conditional_edges(
             "reason",
             should_continue,
             {"tools": "tools", "end": END},
         )
-        builder.add_edge("tools", "reason")  # loop back to reason after tool use
-
+        builder.add_edge("tools", "reason")
         return builder.compile()
 
     def run(self, user_message: str) -> str:
-        """
-        Run the agent with a user message.
-
-        Args:
-            user_message: Natural language request from the student.
-
-        Returns:
-            Agent's final response as a string.
-        """
         from datetime import datetime, timezone
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -111,9 +81,9 @@ class CalendarAgent:
             "action_result": "",
         }
 
-        logger.info(f"CalendarAgent.run – query: {user_message!r}")
-        final_state = self._graph.invoke(initial_state)
+        # Inject user_id qua RunnableConfig để các tools có thể truy cập
+        config = {"configurable": {"user_id": self._user_id}}
 
-        # Last message from AI (no tool_calls)
-        response = final_state["messages"][-1].content
-        return response
+        logger.info(f"CalendarAgent.run – user={self._user_id}, query={user_message!r}")
+        final_state = self._graph.invoke(initial_state, config=config)
+        return final_state["messages"][-1].content

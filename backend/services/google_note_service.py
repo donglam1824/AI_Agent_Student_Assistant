@@ -1,101 +1,157 @@
 """
 services/google_note_service.py
 ---------------------------------
-Google Note (Tasks API mapped to Notes) implementation.
+Google Keep (via Google Keep API) implementation – multi-tenant, token từ Database.
+
+Lưu ý: Google Keep API hiện đang ở dạng Limited Access (chỉ dành cho workspace apps).
+Trong phạm vi dự án học tập, chúng ta dùng Google Tasks API như một giải pháp thay thế,
+vì Google Keep API chưa public cho personal accounts.
+
+Scope cần:
+  - https://www.googleapis.com/auth/tasks
 """
 
 from __future__ import annotations
-import os
-import datetime
-from typing import List
+from typing import List, Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from models.note import NoteItem, NoteCreate, NoteUpdate
-from services.graph_note_service import BaseNoteService
 from core.logger import logger
 
+
 SCOPES = ["https://www.googleapis.com/auth/tasks"]
-
-def _get_credentials(credentials_path: str, token_path: str) -> Credentials:
-    creds: Credentials | None = None
-    if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            logger.info("[Google Note] Refreshing expired token...")
-            creds.refresh(Request())
-        else:
-            logger.info("[Google Note] No valid token. Starting OAuth2 flow...")
-            flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-            try:
-                creds = flow.run_local_server(port=0, timeout_seconds=15)
-            except Exception as e:
-                logger.warning(f"[Google Note] Local server failed ({e}). Falling back to manual auth.")
-                flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
-                auth_url, _ = flow.authorization_url(prompt='consent')
-                print("\n" + "="*60)
-                print("⚠️ GOOGLE TASKS AUTH: KHÔNG THỂ TỰ ĐỘNG BẮT MÃ XÁC THỰC ⚠️")
-                print("1. Hãy mở đường link sau trong trình duyệt:")
-                print(auth_url)
-                code = input("\n2. Nhập mã code bạn nhận được từ Google: ").strip()
-                print("="*60 + "\n")
-                flow.fetch_token(code=code)
-                creds = flow.credentials
-
-        with open(token_path, "w") as f:
-            f.write(creds.to_json())
-        logger.info(f"[Google Note] Token saved to {token_path}")
-    return creds
+DEFAULT_TASKLIST = "@default"
 
 
-class GoogleNoteService(BaseNoteService):
-    def __init__(self) -> None:
-        from config.settings import settings
-        creds = _get_credentials(
-            credentials_path=settings.google_credentials_path,
-            token_path=settings.google_token_note_path,
+def _get_credentials_from_db(user_id: str) -> Credentials:
+    """Truy vấn DB lấy token đã mã hóa, giải mã và tạo Credentials cho Google Tasks."""
+    from db.database import SessionLocal
+    from db import crud
+    from core.crypto import decrypt_token
+    from config.settings import settings
+
+    db = SessionLocal()
+    try:
+        user = crud.get_user_by_id(db, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} không tồn tại trong DB.")
+
+        access_token = decrypt_token(user.google_access_token)
+        refresh_token = decrypt_token(user.google_refresh_token)
+
+        if not access_token and not refresh_token:
+            raise ValueError(
+                f"User {user_id} chưa có Google token. Vui lòng đăng nhập lại."
+            )
+
+        creds = Credentials(
+            token=access_token,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret,
+            scopes=SCOPES,
         )
-        self._service = build("tasks", "v1", credentials=creds)
-        logger.info("[Google Note] Tasks mapped to Note service ready.")
 
-    async def list_notes(self, limit: int = 5) -> List[NoteItem]:
-        logger.info(f"[Google Note] Fetching {limit} notes")
+        if not creds.valid and creds.refresh_token:
+            logger.info(f"[Google Tasks] Refreshing token for user={user_id}")
+            creds.refresh(Request())
+            crud.update_user_tokens(
+                db=db,
+                user_id=user_id,
+                access_token=creds.token,
+                refresh_token=creds.refresh_token,
+            )
+
+        return creds
+    finally:
+        db.close()
+
+
+class GoogleNoteService:
+    """
+    Ghi chú qua Google Tasks API.
+    Mỗi ghi chú = 1 Task trong Default Tasklist của user.
+    Title → task.title, Content → task.notes
+    """
+
+    def __init__(self, user_id: str) -> None:
+        creds = _get_credentials_from_db(user_id)
+        self._service = build("tasks", "v1", credentials=creds)
+        self._user_id = user_id
+        logger.info(f"[Google Tasks] Service ready for user={user_id}")
+
+    def _get_or_create_orca_tasklist(self) -> str:
+        """Lấy hoặc tạo Tasklist tên 'ORCA Notes' để ghi chú tách biệt."""
         try:
-            results = self._service.tasks().list(tasklist='@default', maxResults=limit).execute()
-            items = results.get('items', [])
-            note_list = []
-            
-            for task in items:
-                note_list.append(NoteItem(
-                    id=task.get('id', ''),
-                    title=task.get('title', '(Không có tiêu đề)'),
-                    content=task.get('notes', ''),
-                    created_at=task.get('updated', '') 
-                ))
-            return note_list
-        except HttpError as error:
-            logger.error(f"[Google Note] list_notes error: {error}")
+            result = self._service.tasklists().list().execute()
+            for tl in result.get("items", []):
+                if tl.get("title") == "ORCA Notes":
+                    return tl["id"]
+            # Tạo mới nếu chưa có
+            new_tl = self._service.tasklists().insert(body={"title": "ORCA Notes"}).execute()
+            logger.info(f"[Google Tasks] Created 'ORCA Notes' tasklist: {new_tl['id']}")
+            return new_tl["id"]
+        except HttpError as e:
+            logger.warning(f"[Google Tasks] Cannot get tasklist, using @default: {e}")
+            return DEFAULT_TASKLIST
+
+    async def list_notes(self, limit: int = 20) -> List[dict]:
+        """Lấy danh sách ghi chú (tasks) từ ORCA Notes tasklist."""
+        tasklist_id = self._get_or_create_orca_tasklist()
+        try:
+            result = self._service.tasks().list(
+                tasklist=tasklist_id,
+                maxResults=limit,
+                showCompleted=False,
+            ).execute()
+            tasks = result.get("items", [])
+            return [
+                {
+                    "id": t.get("id", ""),
+                    "title": t.get("title", ""),
+                    "content": t.get("notes", ""),
+                    "updated": t.get("updated", ""),
+                }
+                for t in tasks
+            ]
+        except HttpError as e:
+            logger.error(f"[Google Tasks] list_notes error: {e}")
             raise
 
-    async def create_note(self, data: NoteCreate) -> NoteItem:
-        logger.info(f"[Google Note] Creating note: {data.title}")
+    async def create_note(self, title: str, content: str = "") -> dict:
+        """Tạo ghi chú mới (task) trong ORCA Notes."""
+        tasklist_id = self._get_or_create_orca_tasklist()
         task_body = {
-            'title': data.title,
-            'notes': data.content
+            "title": title,
+            "notes": content,
         }
         try:
-            task = self._service.tasks().insert(tasklist='@default', body=task_body).execute()
-            return NoteItem(
-                id=task.get('id', ''),
-                title=task.get('title', ''),
-                content=task.get('notes', ''),
-                created_at=task.get('updated', '')
-            )
-        except HttpError as error:
-            logger.error(f"[Google Note] create_note error: {error}")
+            created = self._service.tasks().insert(
+                tasklist=tasklist_id,
+                body=task_body,
+            ).execute()
+            logger.info(f"[Google Tasks] user={self._user_id} created note: {created.get('id')}")
+            return {
+                "id": created.get("id", ""),
+                "title": created.get("title", ""),
+                "content": created.get("notes", ""),
+                "updated": created.get("updated", ""),
+            }
+        except HttpError as e:
+            logger.error(f"[Google Tasks] create_note error: {e}")
             raise
+
+    async def delete_note(self, note_id: str) -> bool:
+        """Xóa ghi chú (đánh dấu task hoàn thành / xóa)."""
+        tasklist_id = self._get_or_create_orca_tasklist()
+        try:
+            self._service.tasks().delete(tasklist=tasklist_id, task=note_id).execute()
+            logger.info(f"[Google Tasks] user={self._user_id} deleted note: {note_id}")
+            return True
+        except HttpError as e:
+            logger.error(f"[Google Tasks] delete_note error: {e}")
+            return False

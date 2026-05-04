@@ -7,7 +7,7 @@ Database CRUD operations for ORCA models.
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from db.models import User, Chat, ChatMessage, Document, Note
+from db.models import User, Chat, ChatMessage, Document, Note, EmailSummary, EmailPreference
 
 
 # ── User ──────────────────────────────────────────────────────────────────
@@ -28,6 +28,7 @@ def create_or_update_user(
     google_access_token: str = None,
     google_refresh_token: str = None,
 ) -> User:
+    from core.crypto import encrypt_token
     user = get_user_by_email(db, email)
     if user:
         if name:
@@ -35,9 +36,9 @@ def create_or_update_user(
         if picture:
             user.picture = picture
         if google_access_token:
-            user.google_access_token = google_access_token
+            user.google_access_token = encrypt_token(google_access_token)
         if google_refresh_token:
-            user.google_refresh_token = google_refresh_token
+            user.google_refresh_token = encrypt_token(google_refresh_token)
         db.commit()
         db.refresh(user)
         return user
@@ -46,10 +47,32 @@ def create_or_update_user(
         email=email,
         name=name,
         picture=picture,
-        google_access_token=google_access_token,
-        google_refresh_token=google_refresh_token,
+        google_access_token=encrypt_token(google_access_token),
+        google_refresh_token=encrypt_token(google_refresh_token),
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user_tokens(
+    db: Session,
+    user_id: str,
+    access_token: str,
+    refresh_token: Optional[str] = None,
+) -> Optional[User]:
+    """
+    Cập nhật Google tokens đã mã hóa vào DB.
+    Chỉ cập nhật refresh_token nếu được cung cấp (Google không luôn trả về mới).
+    """
+    from core.crypto import encrypt_token
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+    user.google_access_token = encrypt_token(access_token)
+    if refresh_token:
+        user.google_refresh_token = encrypt_token(refresh_token)
     db.commit()
     db.refresh(user)
     return user
@@ -224,4 +247,71 @@ def delete_note(db: Session, note_id: str) -> bool:
         db.commit()
         return True
     return False
+
+
+# ── EmailSummary ─────────────────────────────────────────────────────────
+
+def create_email_summary(db: Session, user_id: str, gmail_id: str, **kwargs) -> EmailSummary:
+    summary = EmailSummary(user_id=user_id, gmail_id=gmail_id, **kwargs)
+    db.add(summary)
+    db.commit()
+    db.refresh(summary)
+    return summary
+
+
+def get_email_summaries(db: Session, user_id: str, limit: int = 50) -> list[EmailSummary]:
+    return (
+        db.query(EmailSummary)
+        .filter(EmailSummary.user_id == user_id)
+        .order_by(EmailSummary.received_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_email_summary_by_gmail_id(db: Session, gmail_id: str) -> Optional[EmailSummary]:
+    return db.query(EmailSummary).filter(EmailSummary.gmail_id == gmail_id).first()
+
+
+def mark_email_read(db: Session, summary_id: str) -> Optional[EmailSummary]:
+    summary = db.query(EmailSummary).filter(EmailSummary.id == summary_id).first()
+    if summary:
+        summary.is_read = True
+        db.commit()
+        db.refresh(summary)
+    return summary
+
+
+def update_email_summary_calendar_event(db: Session, summary_id: str, event_id: str) -> Optional[EmailSummary]:
+    summary = db.query(EmailSummary).filter(EmailSummary.id == summary_id).first()
+    if summary:
+        summary.calendar_event_id = event_id
+        db.commit()
+        db.refresh(summary)
+    return summary
+
+
+# ── EmailPreference ──────────────────────────────────────────────────────
+
+def get_email_preference(db: Session, user_id: str) -> Optional[EmailPreference]:
+    pref = db.query(EmailPreference).filter(EmailPreference.user_id == user_id).first()
+    if not pref:
+        # Create default preference if not exists
+        pref = EmailPreference(user_id=user_id)
+        db.add(pref)
+        db.commit()
+        db.refresh(pref)
+    return pref
+
+
+def update_email_preference(db: Session, user_id: str, **kwargs) -> Optional[EmailPreference]:
+    pref = get_email_preference(db, user_id)
+    if pref:
+        for key, value in kwargs.items():
+            if hasattr(pref, key):
+                setattr(pref, key, value)
+        db.commit()
+        db.refresh(pref)
+    return pref
+
 

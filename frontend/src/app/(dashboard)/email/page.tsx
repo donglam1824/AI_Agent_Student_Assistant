@@ -18,13 +18,13 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import type { EmailItem } from "@/types";
+import type { EmailSummary } from "@/types";
 
 export default function EmailPage() {
-  const [emails, setEmails] = useState<EmailItem[]>([]);
+  const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCompose, setShowCompose] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<EmailSummary | null>(null);
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
@@ -36,7 +36,8 @@ export default function EmailPage() {
 
   const fetchEmails = useCallback(async () => {
     try {
-      const data = await getEmailInbox(15);
+      const { getEmailSummaries } = await import("@/lib/api");
+      const data = await getEmailSummaries(20);
       setEmails(data);
     } catch {
       setEmails([]);
@@ -93,7 +94,8 @@ export default function EmailPage() {
   };
 
   // Extract sender name from email format "Name <email@example.com>"
-  const parseSender = (sender: string) => {
+  const parseSender = (sender: string | null) => {
+    if (!sender) return "Unknown Sender";
     const match = sender.match(/^(.+?)\s*<.+>$/);
     return match ? match[1].replace(/"/g, "") : sender;
   };
@@ -184,13 +186,24 @@ export default function EmailPage() {
                   className={cn(
                     "w-full text-left px-5 py-4 flex items-start gap-3",
                     "hover:bg-bg-elevated transition-colors",
-                    "animate-slide-up group",
+                    "animate-slide-up group relative",
                     selectedEmail?.id === email.id && "bg-accent/5 border-l-2 border-l-accent"
                   )}
                   style={{ animationDelay: `${idx * 30}ms` }}
                 >
+                  {/* Indicator line for priority */}
+                  <div 
+                    className="absolute left-0 top-0 bottom-0 w-1 rounded-r-full"
+                    style={{ 
+                      backgroundColor: 
+                        email.priority === 'urgent' ? '#ef4444' : 
+                        email.priority === 'important' ? '#f59e0b' : 
+                        email.priority === 'follow_up' ? '#3b82f6' : 'transparent'
+                    }}
+                  />
+
                   {/* Avatar */}
-                  <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0 mt-0.5 ml-1">
                     <span className="text-xs font-semibold text-accent">
                       {parseSender(email.sender).charAt(0).toUpperCase()}
                     </span>
@@ -198,19 +211,25 @@ export default function EmailPage() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm font-medium text-text-primary truncate">
+                      <p className="text-sm font-medium text-text-primary truncate flex items-center gap-2">
                         {parseSender(email.sender)}
+                        {email.priority === 'urgent' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded font-bold">KHẨN</span>}
                       </p>
                       <span className="text-[11px] text-text-secondary/70 flex-shrink-0 ml-2">
-                        {formatDate(email.received_date_time)}
+                        {email.received_at ? formatDate(email.received_at) : ''}
                       </span>
                     </div>
                     <p className="text-sm text-text-primary truncate font-medium">
                       {email.subject}
                     </p>
                     <p className="text-xs text-text-secondary truncate mt-0.5">
-                      {email.body_preview}
+                      {email.summary || "Chưa có tóm tắt"}
                     </p>
+                    {email.deadline && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">
+                        ⚠️ Deadline: {formatDate(email.deadline)}
+                      </p>
+                    )}
                   </div>
 
                   <ChevronRight
@@ -250,17 +269,41 @@ export default function EmailPage() {
                     {parseSender(selectedEmail.sender)}
                   </p>
                   <p className="text-xs text-text-secondary">
-                    {selectedEmail.received_date_time}
+                    {selectedEmail.received_at ? formatDate(selectedEmail.received_at) : ''}
                   </p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-border bg-bg-secondary p-5">
-                <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {selectedEmail.body_preview}
+                <div className="mb-3">
+                  <span className={cn(
+                    "inline-block px-2 py-1 rounded text-xs font-bold uppercase",
+                    selectedEmail.priority === 'urgent' ? "bg-red-100 text-red-700" :
+                    selectedEmail.priority === 'important' ? "bg-amber-100 text-amber-700" :
+                    selectedEmail.priority === 'follow_up' ? "bg-blue-100 text-blue-700" :
+                    "bg-emerald-100 text-emerald-700"
+                  )}>
+                    Mức độ: {selectedEmail.priority || "Thông tin"}
+                  </span>
+                </div>
+                <h4 className="text-sm font-semibold mb-2">Tóm tắt AI:</h4>
+                <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap bg-bg-primary p-3 rounded-lg border border-border">
+                  {selectedEmail.summary || "Chưa có tóm tắt chi tiết."}
                 </p>
-                <p className="text-xs text-text-secondary/60 mt-4 italic">
-                  (Hiển thị xem trước – nội dung đầy đủ cần tích hợp thêm)
+                
+                {selectedEmail.deadline && (
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
+                    <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                      ⚠️ Hạn chót: {new Date(selectedEmail.deadline).toLocaleString('vi-VN')}
+                    </p>
+                    {selectedEmail.calendar_event_id && (
+                      <p className="text-xs text-red-500 mt-1">Đã tự động thêm vào lịch học của bạn.</p>
+                    )}
+                  </div>
+                )}
+                
+                <p className="text-xs text-text-secondary/60 mt-4 italic text-right">
+                  Scan session: {selectedEmail.scan_session}
                 </p>
               </div>
             </div>

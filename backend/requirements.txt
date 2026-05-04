@@ -46,6 +46,7 @@ uvicorn>=0.32.0
 # Auth & API
 python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.9
+cryptography>=43.0.0   # Fernet token encryption
 
 # Utils
 python-dotenv>=1.0.0

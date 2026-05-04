@@ -47,10 +47,13 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database tables on startup."""
+    """Initialize database tables and background services on startup."""
     logger.info("Starting ORCA API server...")
     init_db()
     logger.info("Database initialized.")
+    
+    from services.email_scheduler import init_scheduler
+    init_scheduler()
 
 
 @app.get("/")

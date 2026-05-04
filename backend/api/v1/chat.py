@@ -78,17 +78,17 @@ def _classify_intent(text: str) -> str:
     return "unknown"
 
 
-def _get_agent(intent: str):
-    """Lazy-load the appropriate agent based on intent."""
+def _get_agent(intent: str, user_id: str):
+    """Lazy-load the appropriate agent based on intent, with user_id for auth."""
     if intent == "calendar":
         from agents.calendar.agent import CalendarAgent
-        return CalendarAgent()
+        return CalendarAgent(user_id=user_id)
     elif intent == "note":
         from agents.note.agent import NoteAgent
-        return NoteAgent()
+        return NoteAgent(user_id=user_id)
     elif intent == "email":
         from agents.email.agent import EmailAgent
-        return EmailAgent()
+        return EmailAgent(user_id=user_id)
     elif intent == "docsearch":
         from agents.doc_search.agent import DocSearchAgent
         return DocSearchAgent()
@@ -110,15 +110,14 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
         # Send agent event
         yield f"event: agent\ndata: {json.dumps({'agent': intent})}\n\n"
 
-        # Get response from agent
-        agent = _get_agent(intent)
+        # Get response from agent (pass user_id for Google API auth)
+        agent = _get_agent(intent, user_id=user_id)
         if agent is None:
             response_text = "Xin lỗi, mình chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn về Lịch học, Ghi chú, Email hoặc Tài liệu không?"
         else:
             response_text = agent.run(user_input)
 
-        # Stream response token by token (simulate streaming for non-streaming agents)
-        # Split into words for natural typing effect
+        # Stream response token by token
         words = response_text.split(" ")
         for i, word in enumerate(words):
             chunk = word + (" " if i < len(words) - 1 else "")
@@ -131,7 +130,6 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
         # Auto-generate chat title from first message
         chat = crud.get_chat_by_id(db, chat_id)
         if chat and chat.title == "Cuộc trò chuyện mới":
-            # Use first 50 chars of user input as title
             chat.title = user_input[:50] + ("..." if len(user_input) > 50 else "")
             db.commit()
 

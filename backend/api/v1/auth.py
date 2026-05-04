@@ -2,7 +2,7 @@
 api/v1/auth.py
 --------------
 Authentication endpoints:
-  - POST /auth/google  → Verify Google ID token, create/update user, return JWT
+  - POST /auth/google  → Exchange Google authorization_code, create/update user, return JWT
   - GET  /auth/me      → Get current user info
 """
 
@@ -10,13 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-
 from db.database import get_db
 from db import crud
 from db.models import User
 from core.security import create_access_token
+from core.logger import logger
 from api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -25,9 +23,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # ── Request / Response Models ─────────────────────────────────────────────
 
 class GoogleLoginRequest(BaseModel):
-    id_token: str
-    access_token: str | None = None
-    refresh_token: str | None = None
+    code: str           # authorization_code từ Frontend (Google OAuth2 code flow)
+    redirect_uri: str   # phải khớp với redirect_uri đã dùng ở phía frontend
 
 
 class AuthResponse(BaseModel):
@@ -51,19 +48,69 @@ async def login_with_google(
     db: Session = Depends(get_db),
 ):
     """
-    Verify a Google ID token and issue a JWT for the ORCA API.
-    Frontend sends the id_token obtained from NextAuth/Google OAuth.
+    Nhận authorization_code từ Frontend sau khi user đồng ý cấp quyền Google.
+    Backend trao đổi code lấy access_token + refresh_token, lưu vào DB mã hóa,
+    rồi trả về JWT của ứng dụng ORCA.
     """
-    try:
-        # Verify the Google ID token
-        idinfo = id_token.verify_oauth2_token(
-            body.id_token,
-            google_requests.Request(),
+    from config.settings import settings
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    from google_auth_oauthlib.flow import Flow
+
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET chưa được cấu hình trên server.",
         )
-    except ValueError:
+
+    # Trao đổi authorization_code lấy tokens
+    try:
+        client_config = {
+            "web": {
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [body.redirect_uri],
+            }
+        }
+
+        scopes = [
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/keep",
+        ]
+
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=scopes,
+            redirect_uri=body.redirect_uri,
+        )
+        flow.fetch_token(code=body.code)
+        credentials = flow.credentials
+
+    except Exception as e:
+        logger.error(f"[auth] Google token exchange failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Google ID token không hợp lệ.",
+            detail=f"Không thể trao đổi authorization code với Google: {str(e)}",
+        )
+
+    # Lấy thông tin user từ id_token
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            credentials.id_token,
+            google_requests.Request(),
+            settings.google_client_id,
+        )
+    except Exception as e:
+        logger.error(f"[auth] id_token verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Không thể xác minh thông tin người dùng từ Google.",
         )
 
     email = idinfo.get("email")
@@ -76,17 +123,19 @@ async def login_with_google(
             detail="Không tìm thấy email trong token.",
         )
 
-    # Create or update user in DB
+    # Lưu user + tokens mã hóa vào DB
     user = crud.create_or_update_user(
         db=db,
         email=email,
         name=name,
         picture=picture,
-        google_access_token=body.access_token,
-        google_refresh_token=body.refresh_token,
+        google_access_token=credentials.token,
+        google_refresh_token=credentials.refresh_token,
     )
 
-    # Issue JWT
+    logger.info(f"[auth] Login success: {email} (user_id={user.id})")
+
+    # Phát hành JWT nội bộ
     jwt_token = create_access_token(user_id=user.id, email=user.email)
 
     return AuthResponse(

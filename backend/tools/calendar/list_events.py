@@ -2,6 +2,7 @@
 tools/calendar/list_events.py
 ------------------------------
 LangChain tool: list calendar events within a date range.
+Nhận user_id qua LangChain RunnableConfig để hỗ trợ đa người dùng.
 """
 
 import asyncio
@@ -9,13 +10,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from langchain_core.tools import tool
-
-from services.graph_calendar_service import get_calendar_service
+from langchain_core.runnables import RunnableConfig
 from core.logger import logger
 
 
 @tool
-def list_calendar_events(days_ahead: int = 7) -> str:
+def list_calendar_events(days_ahead: int = 7, config: RunnableConfig = None) -> str:
     """
     Liệt kê các sự kiện lịch sắp tới trong N ngày tiếp theo.
 
@@ -25,7 +25,12 @@ def list_calendar_events(days_ahead: int = 7) -> str:
     Returns:
         Danh sách sự kiện dạng văn bản.
     """
-    service = get_calendar_service()
+    user_id = (config or {}).get("configurable", {}).get("user_id")
+    if not user_id:
+        return "❌ Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
+
+    from services.google_calendar_service import GoogleCalendarService
+    service = GoogleCalendarService(user_id=user_id)
     now = datetime.now(timezone.utc)
     end = now + timedelta(days=days_ahead)
 

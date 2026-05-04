@@ -78,3 +78,20 @@ export interface EmailItem {
   received_date_time: string;
 }
 
+export type EmailPriority = "urgent" | "important" | "follow_up" | "info" | null;
+
+export interface EmailSummary {
+  id: string;
+  gmail_id: string;
+  subject: string | null;
+  sender: string | null;
+  received_at: string | null;
+  scan_session: string | null;
+  summary: string | null;
+  priority: EmailPriority;
+  deadline: string | null;
+  calendar_event_id: string | null;
+  requires_reply: boolean;
+  is_read: boolean;
+}
+

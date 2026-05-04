@@ -40,6 +40,8 @@ class User(Base):
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+    email_summaries = relationship("EmailSummary", back_populates="user", cascade="all, delete-orphan")
+    email_preference = relationship("EmailPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class Chat(Base):
@@ -100,3 +102,42 @@ class Note(Base):
 
     # Relationships
     user = relationship("User", back_populates="notes")
+
+
+class EmailSummary(Base):
+    __tablename__ = "email_summaries"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    gmail_id = Column(String, unique=True, nullable=False, index=True)
+    subject = Column(String, nullable=True)
+    sender = Column(String, nullable=True)
+    sender_email = Column(String, nullable=True)
+    received_at = Column(DateTime, nullable=True)
+    scan_session = Column(String, nullable=True)      # "morning", "noon", "afternoon", "evening"
+    summary = Column(Text, nullable=True)
+    priority = Column(String, nullable=True)          # "urgent", "important", "follow_up", "info"
+    deadline = Column(DateTime, nullable=True)
+    calendar_event_id = Column(String, nullable=True)
+    requires_reply = Column(Boolean, default=False)
+    action_items = Column(Text, nullable=True)        # JSON array string
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="email_summaries")
+
+
+class EmailPreference(Base):
+    __tablename__ = "email_preferences"
+
+    user_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    academic_domains = Column(Text, default='[]')      # JSON array string
+    auto_create_calendar = Column(Boolean, default=True)
+    notify_urgent_toast = Column(Boolean, default=True)
+    notify_all_toast = Column(Boolean, default=False)
+    last_scan_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="email_preference")

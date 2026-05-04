@@ -1,43 +1,43 @@
 """
 tools/note/list_notes.py
 ------------------------
-LangChain tool to list notes from SQLite (local storage).
+LangChain tool to list notes from Google Tasks (ORCA Notes).
+Nhận user_id qua LangChain RunnableConfig.
 """
 
+import asyncio
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from core.logger import logger
 
 
 @tool
-def list_notes(limit: int = 5) -> str:
+def list_notes(limit: int = 10, config: RunnableConfig = None) -> str:
     """
-    Xem các ghi chú học tập gần đây của sinh viên.
+    Liệt kê các ghi chú học tập gần đây của người dùng.
 
     Args:
-        limit: Số ghi chú muốn xem (mặc định 5)
+        limit: Số ghi chú cần lấy (mặc định 10).
     """
-    from db.database import SessionLocal
-    from db import crud
+    user_id = (config or {}).get("configurable", {}).get("user_id")
+    if not user_id:
+        return "❌ Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
 
-    db = SessionLocal()
+    from services.google_note_service import GoogleNoteService
+    service = GoogleNoteService(user_id=user_id)
     try:
-        # Dùng user mặc định cho CLI / agent mode;
-        # trong API mode, user_id được truyền qua endpoint.
-        notes = crud.get_user_notes(db, user_id="default", limit=limit)
+        notes = asyncio.run(service.list_notes(limit=limit))
         if not notes:
-            return "Chưa có ghi chú nào. Bạn có thể nhờ mình tạo ghi chú mới."
+            return "Không có ghi chú nào. Bạn có muốn tạo ghi chú mới không?"
 
-        lines = [f"📝 Danh sách {len(notes)} ghi chú gần đây:"]
+        lines = [f"📝 Danh sách {len(notes)} ghi chú:"]
         for n in notes:
-            updated = n.updated_at.strftime("%d/%m/%Y %H:%M") if n.updated_at else ""
+            content_preview = n["content"][:80] if n["content"] else "(không có nội dung)"
             lines.append(
-                f"  • [{n.id[:8]}] {n.title}\n"
-                f"    Nội dung: {n.content[:80]}{'...' if len(n.content) > 80 else ''}\n"
-                f"    Cập nhật: {updated}"
+                f"  • [{n['id'][:8]}] {n['title']}\n"
+                f"    {content_preview}{'...' if len(n['content']) > 80 else ''}"
             )
         return "\n".join(lines)
     except Exception as e:
-        logger.error(f"Error listing notes: {e}")
+        logger.error(f"Error listing notes for user={user_id}: {e}")
         return f"Lỗi khi lấy ghi chú: {e}"
-    finally:
-        db.close()

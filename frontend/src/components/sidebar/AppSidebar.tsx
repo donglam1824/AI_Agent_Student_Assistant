@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { EmailNotificationBadge } from "@/components/email/EmailNotificationBadge";
 
 const NAV_ITEMS = [
   { href: "/chat", icon: MessageSquare, label: "Chat AI", id: "nav-chat" },
@@ -69,6 +70,17 @@ export function AppSidebar() {
       <nav className="flex-1 py-3 px-2 space-y-1">
         {NAV_ITEMS.map(({ href, icon: Icon, label, id }) => {
           const isActive = pathname === href || pathname?.startsWith(href + "/");
+          
+          if (id === "nav-email") {
+            return (
+              <EmailNotificationBadge 
+                key={href} 
+                sidebarOpen={sidebarOpen} 
+                isActive={isActive} 
+              />
+            );
+          }
+
           return (
             <Link
               key={href}

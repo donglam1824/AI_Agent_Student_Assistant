@@ -37,6 +37,24 @@ class SendEmailRequest(BaseModel):
     cc_recipients: Optional[List[str]] = None
 
 
+class EmailSummaryResponse(BaseModel):
+    id: str
+    gmail_id: str
+    subject: Optional[str]
+    sender: Optional[str]
+    received_at: Optional[str]
+    scan_session: Optional[str]
+    summary: Optional[str]
+    priority: Optional[str]
+    deadline: Optional[str]
+    calendar_event_id: Optional[str]
+    requires_reply: bool
+    is_read: bool
+
+    class Config:
+        from_attributes = True
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 @router.get("/inbox", response_model=list[EmailItem])
@@ -46,9 +64,9 @@ async def get_inbox(
 ):
     """Get recent emails from Gmail inbox."""
     try:
-        from services.google_email_service import GoogleEmailService
-        service = GoogleEmailService()
         import asyncio
+        from services.google_email_service import GoogleEmailService
+        service = GoogleEmailService(user_id=current_user.id)
         emails = asyncio.run(service.list_emails(limit=limit))
 
         return [
@@ -73,9 +91,10 @@ async def send_email(
 ):
     """Send an email via Gmail."""
     try:
+        import asyncio
         from services.google_email_service import GoogleEmailService
         from models.email import EmailCreate
-        service = GoogleEmailService()
+        service = GoogleEmailService(user_id=current_user.id)
 
         data = EmailCreate(
             subject=body.subject,
@@ -83,7 +102,6 @@ async def send_email(
             to_recipients=body.to_recipients,
             cc_recipients=body.cc_recipients,
         )
-        import asyncio
         success = asyncio.run(service.send_email(data))
 
         if success:
@@ -94,3 +112,40 @@ async def send_email(
     except Exception as e:
         logger.error(f"Email send error: {e}")
         raise HTTPException(status_code=500, detail=f"Lỗi khi gửi email: {str(e)}")
+
+
+@router.get("/summaries", response_model=list[EmailSummaryResponse])
+async def get_summaries(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get summarized emails from the database."""
+    try:
+        from db.crud import get_email_summaries
+        summaries = get_email_summaries(db, user_id=current_user.id, limit=limit)
+        
+        # Convert datetime to ISO string for JSON serialization
+        results = []
+        for s in summaries:
+            s_dict = {
+                "id": s.id,
+                "gmail_id": s.gmail_id,
+                "subject": s.subject,
+                "sender": s.sender,
+                "received_at": s.received_at.isoformat() if s.received_at else None,
+                "scan_session": s.scan_session,
+                "summary": s.summary,
+                "priority": s.priority,
+                "deadline": s.deadline.isoformat() if s.deadline else None,
+                "calendar_event_id": s.calendar_event_id,
+                "requires_reply": s.requires_reply,
+                "is_read": s.is_read
+            }
+            results.append(s_dict)
+            
+        return results
+    except Exception as e:
+        logger.error(f"Email summaries fetch error: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lấy tóm tắt email: {str(e)}")
+
