@@ -81,7 +81,8 @@ async def login_with_google(
             "https://www.googleapis.com/auth/userinfo.profile",
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/gmail.modify",
-            "https://www.googleapis.com/auth/keep",
+            "https://www.googleapis.com/auth/tasks",
+            "https://www.googleapis.com/auth/drive.readonly",  # Google Drive RAG
         ]
 
         flow = Flow.from_client_config(

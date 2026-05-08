@@ -18,16 +18,17 @@ def list_documents() -> str:
     try:
         docs = service.list_documents()
         if not docs:
-            return "📚 Chưa có tài liệu nào được upload. Hãy dùng lệnh upload để thêm tài liệu."
+            return "Chua co tai lieu nao duoc upload. Hay dung lenh upload de them tai lieu."
         
-        lines = ["📚 Danh sách tài liệu đã lưu:\n"]
+        lines = ["Danh sach tai lieu da luu:\n"]
         for i, doc in enumerate(docs, 1):
+            source_icon = "[Drive]" if doc.get('source_type') == 'google_drive' else "[Upload]"
             lines.append(
-                f"  {i}. {doc['file_name']} "
-                f"– {doc['num_chunks']} chunks "
-                f"– Upload: {doc['uploaded_at']}"
+                f"  {i}. {source_icon} {doc['file_name']} "
+                f"- {doc['num_chunks']} chunks "
+                f"- {doc['uploaded_at']}"
             )
         return "\n".join(lines)
     except Exception as e:
         logger.error(f"list_documents error: {e}")
-        return f"❌ Lỗi khi lấy danh sách: {e}"
+        return f"Loi khi lay danh sach: {e}"

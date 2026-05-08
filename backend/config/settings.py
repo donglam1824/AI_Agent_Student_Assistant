@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:3000"  # Phải khớp với Google Console
     google_calendar_id: str = "primary"
 
+    # ── Google Drive RAG Integration ────────────────────────────────────────
+    # Số file tối đa được sync từ Drive vào RAG (tránh quá tải tài nguyên)
+    google_drive_max_files: int = 50
+    # Yêu cầu scope drive.readonly khi login (true = thêm scope Drive)
+    google_drive_enabled: bool = True
+
     # ── Token Encryption ────────────────────────────────────────────────────
     # Sinh key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     token_encryption_key: str = ""
