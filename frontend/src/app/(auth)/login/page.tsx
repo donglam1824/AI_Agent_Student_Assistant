@@ -28,6 +28,7 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/tasks",
+  "https://www.googleapis.com/auth/drive.readonly",
 ].join(" ");
 
 export default function LoginPage() {
@@ -43,8 +44,8 @@ export default function LoginPage() {
     scope: GOOGLE_SCOPES,
     access_type: "offline",      // Bắt buộc để nhận refresh_token
     prompt: "consent",           // Bắt Google luôn hiện màn hình đồng ý (để lấy refresh_token)
-    redirect_uri: process.env.NEXT_PUBLIC_API_URL
-      ? `${window.location.origin}`
+    redirect_uri: typeof window !== "undefined"
+      ? window.location.origin
       : "http://localhost:3000",
     onSuccess: async (codeResponse) => {
       try {

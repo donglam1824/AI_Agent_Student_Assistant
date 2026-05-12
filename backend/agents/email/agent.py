@@ -1,8 +1,7 @@
 """
 agents/email/agent.py
 ---------------------
-EmailAgent – LangGraph ReAct-style agent for email operations.
-Nhận user_id và inject vào RunnableConfig khi invoke graph.
+EmailAgent - LangGraph ReAct-style agent for Gmail and Outlook operations.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -11,30 +10,37 @@ from langgraph.prebuilt import ToolNode
 
 from agents.email.nodes import make_reason_node, should_continue
 from agents.email.state import EmailAgentState
+from agents.email.tools.analyze_priority import analyze_priority
+from agents.email.tools.create_reminder import create_reminder
+from agents.email.tools.extract_deadline import extract_deadline
 from core.llm_manager import llm_manager
 from core.logger import logger
 from tools.email.list_emails import list_emails
+from tools.email.reply_email import reply_email
 from tools.email.send_email import send_email
-from agents.email.tools.analyze_priority import analyze_priority
-from agents.email.tools.extract_deadline import extract_deadline
-from agents.email.tools.create_reminder import create_reminder
 
-SYSTEM_PROMPT = """Bạn là trợ lý email học thuật thông minh dành cho sinh viên.
-Bạn giúp sinh viên quản lý hộp thư, đọc email từ giảng viên/nhà trường, và soạn email học thuật.
 
-Hướng dẫn:
-- Luôn trả lời bằng tiếng Việt.
-- Khi cần thao tác email, hãy sử dụng các tool được cung cấp.
-- Khi người dùng hỏi về email mới, hãy dùng list_emails.
-- Khi soạn email, hãy dùng giọng văn lịch sự, trang trọng phù hợp với môi trường học thuật.
-- Ví dụ email học thuật: xin phép nghỉ học, hỏi bài giảng viên, phản hồi phòng đào tạo.
-- Luôn xác nhận nội dung email với người dùng trước khi gửi.
-- Thời gian hiện tại: {current_time}
+SYSTEM_PROMPT = """Ban la tro ly email hoc thuat thong minh danh cho sinh vien.
+Ban giup sinh vien quan ly ca Gmail va Outlook, doc email tu giang vien/nha truong,
+soan email hoc thuat va tra loi email.
+
+Huong dan:
+- Luon tra loi bang tieng Viet.
+- Khi nguoi dung hoi email moi ma khong noi ro nguon, dung list_emails voi source="all".
+- Khi nguoi dung chi ro Gmail hoac Outlook, dung source="gmail" hoac source="outlook".
+- Email ID tu list_emails co dang gmail:<id> hoac outlook:<id>; khi tra loi email, truyen nguyen ID nay cho reply_email.
+- Khi gui email moi, neu nguoi dung khong chi ro hop thu gui, dung source mac dinh theo tool send_email.
+- Khi soan email, dung giong van lich su, trang trong va phu hop moi truong hoc thuat.
+- Vi du email hoc thuat: xin phep nghi hoc, hoi bai giang vien, phan hoi phong dao tao.
+- Luon xac nhan noi dung email voi nguoi dung truoc khi gui hoac tra loi.
+- Thoi gian hien tai: {current_time}
 """
+
 
 EMAIL_TOOLS = [
     list_emails,
     send_email,
+    reply_email,
     analyze_priority,
     extract_deadline,
     create_reminder,
@@ -42,7 +48,7 @@ EMAIL_TOOLS = [
 
 
 class EmailAgent:
-    """LangGraph-based Email Agent – hỗ trợ đa người dùng qua user_id."""
+    """LangGraph-based Email Agent with multi-mailbox support."""
 
     def __init__(self, user_id: str) -> None:
         self._user_id = user_id
@@ -68,8 +74,8 @@ class EmailAgent:
 
     def run(self, user_message: str) -> str:
         from datetime import datetime, timezone
-        current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+        current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         initial_state: EmailAgentState = {
             "messages": [
                 SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time)),
@@ -81,6 +87,6 @@ class EmailAgent:
 
         config = {"configurable": {"user_id": self._user_id}}
 
-        logger.info(f"EmailAgent.run – user={self._user_id}, query={user_message!r}")
+        logger.info(f"EmailAgent.run - user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
         return final_state["messages"][-1].content

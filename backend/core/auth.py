@@ -37,3 +37,24 @@ def get_graph_client() -> GraphServiceClient:
 
     logger.info("Microsoft Graph client initialized successfully.")
     return GraphServiceClient(credentials=credential, scopes=CALENDAR_SCOPES)
+
+
+@lru_cache(maxsize=1)
+def get_graph_credential() -> ClientSecretCredential:
+    """Return the Azure credential used for direct Microsoft Graph REST calls."""
+    if not all([settings.azure_client_id, settings.azure_client_secret, settings.azure_tenant_id]):
+        raise EnvironmentError(
+            "Missing Azure credentials. "
+            "Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID in your .env file."
+        )
+
+    return ClientSecretCredential(
+        tenant_id=settings.azure_tenant_id,
+        client_id=settings.azure_client_id,
+        client_secret=settings.azure_client_secret,
+    )
+
+
+def get_graph_access_token() -> str:
+    """Return an application access token for Microsoft Graph."""
+    return get_graph_credential().get_token("https://graph.microsoft.com/.default").token

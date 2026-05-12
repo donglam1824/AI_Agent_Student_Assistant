@@ -74,7 +74,8 @@ class GoogleEmailService(BaseEmailService):
         self._user_id = user_id
         logger.info(f"[Google Email] Gmail service ready for user={user_id}")
 
-    async def list_emails(self, limit: int = 5) -> List[EmailMessage]:
+    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]:
+        _ = source
         logger.info(f"[Google Email] user={self._user_id} fetching {limit} emails")
         try:
             results = self._service.users().messages().list(userId='me', maxResults=limit).execute()
@@ -102,7 +103,8 @@ class GoogleEmailService(BaseEmailService):
                     subject=subject,
                     body_preview=msg_data.get('snippet', ''),
                     sender=sender,
-                    received_date_time=date_str
+                    received_date_time=date_str,
+                    source="gmail",
                 ))
             return email_list
         except HttpError as error:
@@ -184,4 +186,46 @@ class GoogleEmailService(BaseEmailService):
             return True
         except HttpError as error:
             logger.error(f"[Google Email] send_email error: {error}")
+            return False
+
+    async def reply_email(self, message_id: str, body: str) -> bool:
+        logger.info(f"[Google Email] user={self._user_id} replying to: {message_id}")
+        try:
+            original = self._service.users().messages().get(
+                userId='me',
+                id=message_id,
+                format='metadata',
+                metadataHeaders=['Subject', 'From', 'Message-ID', 'References'],
+            ).execute()
+            headers = original.get('payload', {}).get('headers', [])
+            header_map = {h.get('name', '').lower(): h.get('value', '') for h in headers}
+
+            subject = header_map.get('subject') or "(Khong co tieu de)"
+            if not subject.lower().startswith("re:"):
+                subject = f"Re: {subject}"
+
+            sender = header_map.get('from')
+            message = PythonEmailMessage()
+            message.set_content(body)
+            message['To'] = sender
+            message['Subject'] = subject
+
+            message_id_header = header_map.get('message-id')
+            references = header_map.get('references')
+            if message_id_header:
+                message['In-Reply-To'] = message_id_header
+                message['References'] = f"{references} {message_id_header}".strip()
+
+            encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            self._service.users().messages().send(
+                userId='me',
+                body={
+                    'raw': encoded_message,
+                    'threadId': original.get('threadId'),
+                },
+            ).execute()
+            logger.info(f"[Google Email] Replied to message={message_id}")
+            return True
+        except HttpError as error:
+            logger.error(f"[Google Email] reply_email error: {error}")
             return False

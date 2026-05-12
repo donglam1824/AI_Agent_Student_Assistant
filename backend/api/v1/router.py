@@ -13,6 +13,7 @@ from api.v1.calendar import router as calendar_router
 from api.v1.notes import router as notes_router
 from api.v1.email import router as email_router
 from api.v1.email_notifications import router as email_notifications_router
+from api.v1.teams import router as teams_router
 
 api_router = APIRouter()
 
@@ -23,3 +24,4 @@ api_router.include_router(calendar_router)
 api_router.include_router(notes_router)
 api_router.include_router(email_router)
 api_router.include_router(email_notifications_router)
+api_router.include_router(teams_router)

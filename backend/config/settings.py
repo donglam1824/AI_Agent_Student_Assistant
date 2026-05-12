@@ -5,6 +5,7 @@ Centralized configuration using pydantic-settings.
 All values are loaded from environment variables / .env file.
 """
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,11 +31,11 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
 
     # ── Microsoft Azure / Graph ────────────────────────────────────────────
-    azure_client_id: str = ""
-    azure_client_secret: str = ""
-    azure_tenant_id: str = ""
+    azure_client_id: str = Field(default="", validation_alias=AliasChoices("AZURE_CLIENT_ID", "MS_CLIENT_ID"))
+    azure_client_secret: str = Field(default="", validation_alias=AliasChoices("AZURE_CLIENT_SECRET", "MS_CLIENT_SECRET"))
+    azure_tenant_id: str = Field(default="", validation_alias=AliasChoices("AZURE_TENANT_ID", "MS_TENANT_ID"))
     # Delegated user UPN or object-id (needed for application-level access)
-    graph_user_id: str = "me"
+    graph_user_id: str = Field(default="me", validation_alias=AliasChoices("GRAPH_USER_ID", "MS_GRAPH_USER_ID"))
 
     # ── Google OAuth2 Web Flow ─────────────────────────────────────────────
     # Client ID và Secret dùng cho server-side authorization code exchange
@@ -66,7 +67,10 @@ class Settings(BaseSettings):
     # calendar_provider: "mock" | "google" | "msgraph"
     calendar_provider: str = "google"
     email_provider: str = "google"
+    email_providers: str = ""
+    default_email_provider: str = "gmail"
     note_provider: str = "google"  # "sqlite" for local storage, "google" for Google Keep
+    teams_provider: str = "msgraph"
 
 
 

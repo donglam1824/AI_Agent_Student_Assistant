@@ -55,14 +55,15 @@ def _classify_intent(text: str) -> str:
     llm = llm_manager.get("default")
     prompt = (
         "Bạn là một bộ định tuyến cực kỳ chính xác.\n"
-        "Hãy phân tích câu sau của người dùng và xếp nó vào 1 trong 4 nhóm chức năng:\n"
+        "Hãy phân tích câu sau của người dùng và xếp nó vào 1 trong 5 nhóm chức năng:\n"
         "1. 'calendar': Các câu hỏi liên quan đến lịch trình, thời gian biểu, hẹn hò, cuộc họp, sự kiện, dời lịch...\n"
         "2. 'note': Các câu hỏi về việc ghi chép, tạo ghi chú lưu trữ, xem các ghi chú cũ, tóm tắt bài giảng...\n"
         "3. 'email': Các câu hỏi yêu cầu soạn thư, gửi email, kiểm tra hòm thư, xử lý thư phản hồi...\n"
         "4. 'docsearch': Tìm kiếm tài liệu, hỏi đáp kiến thức từ tệp tải lên, quản lý tài liệu (PDF, TXT, DOCX)...\n"
+        "5. 'teams': Các câu hỏi về Microsoft Teams, lớp Teams, kênh, thông báo, tin nhắn lớp, bài tập trên Teams...\n"
         "Nếu không liên quan hoặc không thể xác định, hãy trả về 'unknown'.\n\n"
         f"Câu hỏi: \"{text}\"\n"
-        "CHỈ trả về ĐÚNG 1 TỪ DUY NHẤT (lowercase) thuộc: [calendar, note, email, docsearch, unknown]."
+        "CHỈ trả về ĐÚNG 1 TỪ DUY NHẤT (lowercase) thuộc: [calendar, note, email, docsearch, teams, unknown]."
     )
     response = llm.invoke(prompt)
     intent = response.content.strip().lower()
@@ -75,6 +76,11 @@ def _classify_intent(text: str) -> str:
         return "email"
     if "docsearch" in intent or "search" in intent:
         return "docsearch"
+    if "teams" in intent or "team" in intent:
+        return "teams"
+    text_lower = text.lower()
+    if any(keyword in text_lower for keyword in ["teams", "team", "lớp teams", "tin nhắn lớp", "bài tập teams"]):
+        return "teams"
     return "unknown"
 
 
@@ -92,6 +98,9 @@ def _get_agent(intent: str, user_id: str):
     elif intent == "docsearch":
         from agents.doc_search.agent import DocSearchAgent
         return DocSearchAgent()
+    elif intent == "teams":
+        from agents.teams.agent import TeamsAgent
+        return TeamsAgent(user_id=user_id)
     return None
 
 
@@ -113,7 +122,7 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
         # Get response from agent (pass user_id for Google API auth)
         agent = _get_agent(intent, user_id=user_id)
         if agent is None:
-            response_text = "Xin lỗi, mình chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn về Lịch học, Ghi chú, Email hoặc Tài liệu không?"
+            response_text = "Xin lỗi, mình chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn về Lịch học, Ghi chú, Email, Teams hoặc Tài liệu không?"
         else:
             response_text = agent.run(user_input)
 

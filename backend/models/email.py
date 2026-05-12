@@ -13,6 +13,7 @@ class EmailCreate(BaseModel):
     body: str = Field(..., description="Body content of the email")
     to_recipients: List[str] = Field(..., description="List of recipient email addresses")
     cc_recipients: Optional[List[str]] = Field(default=None, description="List of CC email addresses")
+    source: Optional[str] = Field(default=None, description="Email source: gmail or outlook")
 
 class EmailMessage(BaseModel):
     """Output model representing an email message returned from the Graph API."""
@@ -21,6 +22,7 @@ class EmailMessage(BaseModel):
     body_preview: str = Field(..., description="Preview of the email body")
     sender: str = Field(..., description="Sender's email address")
     received_date_time: str = Field(..., description="When the email was received")
+    source: Optional[str] = Field(default=None, description="Email source: gmail or outlook")
     
     class Config:
         from_attributes = True

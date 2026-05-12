@@ -1,43 +1,47 @@
 """
 tools/email/list_emails.py
 --------------------------
-LangChain tool to list emails.
-Nhận user_id qua LangChain RunnableConfig.
+LangChain tool to list emails from Gmail, Outlook, or both.
 """
 
 import asyncio
-from langchain_core.tools import tool
+
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
+
 from core.logger import logger
 
 
 @tool
-def list_emails(limit: int = 5, config: RunnableConfig = None) -> str:
+def list_emails(source: str = "all", limit: int = 5, config: RunnableConfig = None) -> str:
     """
-    Get the most recent emails from the user's inbox.
+    Get recent emails from Gmail, Outlook, or both mailboxes.
 
     Args:
-        limit: Number of emails to retrieve (default: 5)
+        source: Email source: "all", "gmail", or "outlook".
+        limit: Number of emails to retrieve.
     """
     user_id = (config or {}).get("configurable", {}).get("user_id")
     if not user_id:
-        return "❌ Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
+        return "Loi: Khong tim thay thong tin nguoi dung. Vui long dang nhap lai."
 
-    from services.google_email_service import GoogleEmailService
-    service = GoogleEmailService(user_id=user_id)
+    from services.graph_email_service import get_email_service
+
+    service = get_email_service(user_id=user_id)
     try:
-        emails = asyncio.run(service.list_emails(limit=limit))
+        emails = asyncio.run(service.list_emails(limit=limit, source=source))
         if not emails:
-            return "Không có email nào."
+            return "Khong co email nao."
 
-        lines = [f"📧 Danh sách {len(emails)} email gần đây:"]
-        for e in emails:
+        lines = [f"Danh sach {len(emails)} email gan day:"]
+        for email in emails:
+            source_label = (email.source or "email").upper()
             lines.append(
-                f"  • [{e.id[:8]}] Từ: {e.sender} | Tiêu đề: {e.subject}\n"
-                f"    Xem trước: {e.body_preview[:80]}...\n"
-                f"    Nhận lúc: {e.received_date_time}"
+                f"- [{email.id}] Nguon: {source_label} | Tu: {email.sender} | Tieu de: {email.subject}\n"
+                f"  Xem truoc: {email.body_preview[:120]}\n"
+                f"  Nhan luc: {email.received_date_time}"
             )
         return "\n".join(lines)
     except Exception as e:
         logger.error(f"Error listing emails for user={user_id}: {e}")
-        return f"Lỗi khi lấy email: {e}"
+        return f"Loi khi lay email: {e}"

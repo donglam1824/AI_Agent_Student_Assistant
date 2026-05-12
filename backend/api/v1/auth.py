@@ -63,6 +63,10 @@ async def login_with_google(
             detail="GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET chưa được cấu hình trên server.",
         )
 
+    # Nới lỏng kiểm tra scope để tránh lỗi "Scope has changed" từ oauthlib
+    import os
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+
     # Trao đổi authorization_code lấy tokens
     try:
         client_config = {

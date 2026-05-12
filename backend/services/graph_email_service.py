@@ -7,7 +7,7 @@ Abstraction over Email API.
 from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from models.email import EmailMessage, EmailCreate
 from core.logger import logger
@@ -15,10 +15,13 @@ from core.logger import logger
 
 class BaseEmailService(ABC):
     @abstractmethod
-    async def list_emails(self, limit: int = 5) -> List[EmailMessage]: ...
+    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]: ...
 
     @abstractmethod
     async def send_email(self, data: EmailCreate) -> bool: ...
+
+    @abstractmethod
+    async def reply_email(self, message_id: str, body: str) -> bool: ...
 
 
 class MockEmailService(BaseEmailService):
@@ -37,12 +40,17 @@ class MockEmailService(BaseEmailService):
             )
         )
 
-    async def list_emails(self, limit: int = 5) -> List[EmailMessage]:
+    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]:
+        _ = source
         logger.debug(f"[Mock Email] Listing emails: limit={limit}")
         return self._store[:limit]
 
     async def send_email(self, data: EmailCreate) -> bool:
         logger.info(f"[Mock Email] Sent email '{data.subject}' to {data.to_recipients}")
+        return True
+
+    async def reply_email(self, message_id: str, body: str) -> bool:
+        logger.info(f"[Mock Email] Replied to '{message_id}': {body[:80]}")
         return True
 
 
@@ -54,7 +62,8 @@ class GraphEmailService(BaseEmailService):
         self._client = get_graph_client()
         self._user_id = settings.graph_user_id
 
-    async def list_emails(self, limit: int = 5) -> List[EmailMessage]:
+    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]:
+        _ = source
         logger.info(f"[Graph Email] Fetching {limit} emails")
         result = await (
             self._client.users
@@ -72,7 +81,8 @@ class GraphEmailService(BaseEmailService):
                     subject=m.subject or "(Không có tiêu đề)",
                     body_preview=m.body_preview or "",
                     sender=m.sender.email_address.address if m.sender and m.sender.email_address else "unknown",
-                    received_date_time=m.received_date_time.isoformat() if m.received_date_time else ""
+                    received_date_time=m.received_date_time.isoformat() if m.received_date_time else "",
+                    source="outlook",
                 ))
         return emails
 
@@ -100,19 +110,48 @@ class GraphEmailService(BaseEmailService):
         logger.info(f"[Graph Email] Sent email '{data.subject}'")
         return True
 
+    async def reply_email(self, message_id: str, body: str) -> bool:
+        import requests
+        from core.auth import get_graph_access_token
 
-def get_email_service() -> BaseEmailService:
+        url = f"https://graph.microsoft.com/v1.0/users/{self._user_id}/messages/{message_id}/reply"
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {get_graph_access_token()}",
+                "Content-Type": "application/json",
+            },
+            json={"comment": body},
+            timeout=30,
+        )
+        if response.status_code >= 400:
+            logger.error(f"[Graph Email] Reply failed: {response.status_code} {response.text}")
+            response.raise_for_status()
+        logger.info(f"[Graph Email] Replied to message={message_id}")
+        return True
+
+
+def get_email_service(user_id: str | None = None) -> BaseEmailService:
     from config.settings import settings
     provider = settings.email_provider.lower().strip()
+    providers = [p.strip().lower() for p in settings.email_providers.split(",") if p.strip()]
 
     if provider == "mock" or settings.mock_graph:
         return MockEmailService()
 
+    if provider in {"multi", "all"} or len(providers) > 1:
+        from services.multi_email_service import MultiEmailService
+        if not user_id:
+            raise ValueError("MultiEmailService requires user_id")
+        return MultiEmailService(user_id=user_id)
+
     if provider == "google":
         from services.google_email_service import GoogleEmailService
-        return GoogleEmailService()
+        if not user_id:
+            raise ValueError("GoogleEmailService requires user_id")
+        return GoogleEmailService(user_id=user_id)
 
-    if provider == "msgraph":
+    if provider in {"msgraph", "outlook"}:
         return GraphEmailService()
 
     raise ValueError(f"Unknown EMAIL_PROVIDER={provider!r}")
