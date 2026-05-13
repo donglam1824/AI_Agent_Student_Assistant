@@ -60,7 +60,7 @@ class MultiEmailService(BaseEmailService):
 
     def _get_outlook(self) -> GraphEmailService:
         if self._outlook is None:
-            self._outlook = GraphEmailService()
+            self._outlook = GraphEmailService(user_id=self._user_id)
         return self._outlook
 
     async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> list[EmailMessage]:

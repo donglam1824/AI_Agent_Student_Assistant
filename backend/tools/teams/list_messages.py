@@ -27,12 +27,12 @@ def list_team_messages(
         channel_id: ID cua kenh.
         limit: So tin nhan toi da can lay.
     """
-    _ = config
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
         from services.teams_service import get_teams_service
 
         messages = asyncio.run(
-            get_teams_service().list_channel_messages(
+            get_teams_service(user_id=user_id).list_channel_messages(
                 team_id=team_id,
                 channel_id=channel_id,
                 limit=limit,

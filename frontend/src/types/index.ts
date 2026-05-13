@@ -12,9 +12,15 @@ export interface User {
   picture: string | null;
 }
 
+export interface ConnectionStatus {
+  google_connected: boolean;
+  microsoft_connected: boolean;
+  microsoft_account_email: string | null;
+}
+
 // ── Chat ──────────────────────────────────────────────────────────────────
 
-export type AgentType = "calendar" | "note" | "email" | "docsearch" | "unknown";
+export type AgentType = "calendar" | "note" | "email" | "docsearch" | "teams" | "unknown";
 
 export interface ChatMessage {
   id: string;
@@ -76,6 +82,7 @@ export interface EmailItem {
   sender: string;
   body_preview: string;
   received_date_time: string;
+  source?: string | null;
 }
 
 export type EmailPriority = "urgent" | "important" | "follow_up" | "info" | null;
@@ -94,4 +101,3 @@ export interface EmailSummary {
   requires_reply: boolean;
   is_read: boolean;
 }
-

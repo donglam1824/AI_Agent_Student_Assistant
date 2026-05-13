@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     azure_tenant_id: str = Field(default="", validation_alias=AliasChoices("AZURE_TENANT_ID", "MS_TENANT_ID"))
     # Delegated user UPN or object-id (needed for application-level access)
     graph_user_id: str = Field(default="me", validation_alias=AliasChoices("GRAPH_USER_ID", "MS_GRAPH_USER_ID"))
+    microsoft_redirect_uri: str = Field(default="http://localhost:3000/auth/microsoft/callback", validation_alias=AliasChoices("MICROSOFT_REDIRECT_URI", "MS_REDIRECT_URI"))
+    microsoft_scopes: str = (
+        "openid profile email offline_access User.Read "
+        "Mail.Read Mail.Send Team.ReadBasic.All Channel.ReadBasic.All "
+        "ChannelMessage.Read.All EduRoster.ReadBasic EduAssignments.ReadBasic"
+    )
 
     # ── Google OAuth2 Web Flow ─────────────────────────────────────────────
     # Client ID và Secret dùng cho server-side authorization code exchange

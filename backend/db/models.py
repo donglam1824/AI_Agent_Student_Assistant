@@ -33,6 +33,10 @@ class User(Base):
     picture = Column(String, nullable=True)  # Google avatar URL
     google_access_token = Column(Text, nullable=True)
     google_refresh_token = Column(Text, nullable=True)
+    microsoft_access_token = Column(Text, nullable=True)
+    microsoft_refresh_token = Column(Text, nullable=True)
+    microsoft_token_expires_at = Column(DateTime, nullable=True)
+    microsoft_account_email = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

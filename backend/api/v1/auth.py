@@ -27,6 +27,11 @@ class GoogleLoginRequest(BaseModel):
     redirect_uri: str   # phải khớp với redirect_uri đã dùng ở phía frontend
 
 
+class MicrosoftLoginRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
+
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -38,6 +43,16 @@ class UserResponse(BaseModel):
     email: str
     name: str | None
     picture: str | None
+
+
+class ConnectionStatusResponse(BaseModel):
+    google_connected: bool
+    microsoft_connected: bool
+    microsoft_account_email: str | None = None
+
+
+class MicrosoftAuthUrlResponse(BaseModel):
+    auth_url: str
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────
@@ -163,3 +178,64 @@ async def get_me(current_user: User = Depends(get_current_user)):
         name=current_user.name,
         picture=current_user.picture,
     )
+
+
+@router.get("/connections", response_model=ConnectionStatusResponse)
+async def get_connections(current_user: User = Depends(get_current_user)):
+    """Return connected external accounts for the current user."""
+    return ConnectionStatusResponse(
+        google_connected=bool(current_user.google_access_token or current_user.google_refresh_token),
+        microsoft_connected=bool(current_user.microsoft_access_token or current_user.microsoft_refresh_token),
+        microsoft_account_email=current_user.microsoft_account_email,
+    )
+
+
+@router.get("/microsoft/url", response_model=MicrosoftAuthUrlResponse)
+async def get_microsoft_auth_url(
+    redirect_uri: str | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Build a Microsoft authorization URL for connecting the current user."""
+    _ = current_user
+    try:
+        from services.microsoft_oauth_service import build_authorization_url
+
+        return MicrosoftAuthUrlResponse(auth_url=build_authorization_url(redirect_uri=redirect_uri))
+    except Exception as e:
+        logger.error(f"[auth] Microsoft auth URL failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Khong the tao URL dang nhap Microsoft: {str(e)}")
+
+
+@router.post("/microsoft")
+async def connect_microsoft(
+    body: MicrosoftLoginRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Exchange Microsoft authorization_code and store encrypted tokens for current user."""
+    try:
+        from services.microsoft_oauth_service import exchange_code_for_tokens, save_microsoft_tokens
+
+        result = exchange_code_for_tokens(code=body.code, redirect_uri=body.redirect_uri)
+        save_microsoft_tokens(db=db, user_id=current_user.id, token_result=result)
+        user = crud.get_user_by_id(db, current_user.id)
+        return {
+            "message": "Da ket noi Microsoft thanh cong.",
+            "microsoft_account_email": user.microsoft_account_email if user else None,
+        }
+    except Exception as e:
+        logger.error(f"[auth] Microsoft connect failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Khong the ket noi Microsoft: {str(e)}",
+        )
+
+
+@router.delete("/microsoft")
+async def disconnect_microsoft(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Disconnect Microsoft account for current user."""
+    crud.disconnect_user_microsoft(db, current_user.id)
+    return {"message": "Da ngat ket noi Microsoft."}

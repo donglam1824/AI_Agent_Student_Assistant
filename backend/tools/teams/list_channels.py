@@ -21,11 +21,11 @@ def list_team_channels(team_id: str, limit: int = 20, config: RunnableConfig = N
         team_id: ID cua Team/lop hoc.
         limit: So kenh toi da can lay.
     """
-    _ = config
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
         from services.teams_service import get_teams_service
 
-        channels = asyncio.run(get_teams_service().list_channels(team_id=team_id, limit=limit))
+        channels = asyncio.run(get_teams_service(user_id=user_id).list_channels(team_id=team_id, limit=limit))
         if not channels:
             return f"Khong tim thay kenh nao trong Team {team_id}."
 

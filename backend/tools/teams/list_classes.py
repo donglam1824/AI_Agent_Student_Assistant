@@ -20,11 +20,11 @@ def list_education_classes(limit: int = 20, config: RunnableConfig = None) -> st
     Args:
         limit: So lop toi da can lay.
     """
-    _ = config
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
         from services.teams_service import get_teams_service
 
-        classes = asyncio.run(get_teams_service().list_classes(limit=limit))
+        classes = asyncio.run(get_teams_service(user_id=user_id).list_classes(limit=limit))
         if not classes:
             return "Khong tim thay lop Microsoft Education nao."
 

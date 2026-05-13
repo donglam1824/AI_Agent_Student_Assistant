@@ -21,12 +21,12 @@ def list_class_assignments(class_id: str, limit: int = 20, config: RunnableConfi
         class_id: ID cua Education class.
         limit: So bai tap toi da can lay.
     """
-    _ = config
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
         from services.teams_service import get_teams_service
 
         assignments = asyncio.run(
-            get_teams_service().list_assignments(class_id=class_id, limit=limit)
+            get_teams_service(user_id=user_id).list_assignments(class_id=class_id, limit=limit)
         )
         if not assignments:
             return f"Khong co bai tap nao trong lop {class_id}."

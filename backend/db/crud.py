@@ -4,6 +4,7 @@ db/crud.py
 Database CRUD operations for ORCA models.
 """
 
+from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 
@@ -73,6 +74,46 @@ def update_user_tokens(
     user.google_access_token = encrypt_token(access_token)
     if refresh_token:
         user.google_refresh_token = encrypt_token(refresh_token)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user_microsoft_tokens(
+    db: Session,
+    user_id: str,
+    access_token: str,
+    refresh_token: Optional[str] = None,
+    expires_at: Optional[datetime] = None,
+    account_email: Optional[str] = None,
+) -> Optional[User]:
+    """Update encrypted Microsoft OAuth tokens for a user."""
+    from core.crypto import encrypt_token
+
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+    user.microsoft_access_token = encrypt_token(access_token)
+    if refresh_token:
+        user.microsoft_refresh_token = encrypt_token(refresh_token)
+    if expires_at:
+        user.microsoft_token_expires_at = expires_at
+    if account_email:
+        user.microsoft_account_email = account_email
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def disconnect_user_microsoft(db: Session, user_id: str) -> Optional[User]:
+    """Remove Microsoft OAuth tokens from a user."""
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+    user.microsoft_access_token = None
+    user.microsoft_refresh_token = None
+    user.microsoft_token_expires_at = None
+    user.microsoft_account_email = None
     db.commit()
     db.refresh(user)
     return user
@@ -313,5 +354,4 @@ def update_email_preference(db: Session, user_id: str, **kwargs) -> Optional[Ema
         db.commit()
         db.refresh(pref)
     return pref
-
 

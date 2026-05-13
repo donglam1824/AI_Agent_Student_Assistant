@@ -100,12 +100,25 @@ class MockTeamsService(BaseTeamsService):
 class GraphTeamsService(BaseTeamsService):
     """Read-only Teams/Education implementation using Microsoft Graph REST."""
 
-    def __init__(self) -> None:
-        from core.auth import get_graph_access_token
+    def __init__(self, user_id: str | None = None) -> None:
         from config.settings import settings
-
-        self._token = get_graph_access_token()
+        self._local_user_id = user_id
+        self._token = self._get_token()
         self._user_id = settings.graph_user_id
+
+    def _get_token(self) -> str:
+        if self._local_user_id:
+            from db.database import SessionLocal
+            from services.microsoft_oauth_service import get_user_microsoft_access_token
+
+            db = SessionLocal()
+            try:
+                return get_user_microsoft_access_token(db, self._local_user_id)
+            finally:
+                db.close()
+
+        from core.auth import get_graph_access_token
+        return get_graph_access_token()
 
     def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         url = f"{GRAPH_ROOT}{path}"
@@ -125,7 +138,8 @@ class GraphTeamsService(BaseTeamsService):
 
     async def list_teams(self, limit: int = 20) -> List[TeamInfo]:
         logger.info(f"[Teams Graph] Listing teams for user={self._user_id}")
-        data = self._get(f"/users/{self._user_id}/joinedTeams", {"$top": min(limit, 50)})
+        path = "/me/joinedTeams" if self._local_user_id else f"/users/{self._user_id}/joinedTeams"
+        data = self._get(path, {"$top": min(limit, 50)})
         return [
             TeamInfo(
                 id=item.get("id", ""),
@@ -152,7 +166,8 @@ class GraphTeamsService(BaseTeamsService):
 
     async def list_classes(self, limit: int = 20) -> List[EducationClassInfo]:
         logger.info("[Teams Graph] Listing education classes")
-        data = self._get("/education/classes", {"$top": min(limit, 50)})
+        path = "/education/me/classes" if self._local_user_id else "/education/classes"
+        data = self._get(path, {"$top": min(limit, 50)})
         return [
             EducationClassInfo(
                 id=item.get("id", ""),
@@ -216,12 +231,12 @@ class GraphTeamsService(BaseTeamsService):
         return assignments[:limit]
 
 
-def get_teams_service() -> BaseTeamsService:
+def get_teams_service(user_id: str | None = None) -> BaseTeamsService:
     from config.settings import settings
 
     provider = settings.teams_provider.lower().strip()
     if provider == "mock" or settings.mock_graph:
         return MockTeamsService()
     if provider == "msgraph":
-        return GraphTeamsService()
+        return GraphTeamsService(user_id=user_id)
     raise ValueError(f"Unknown TEAMS_PROVIDER={provider!r}")

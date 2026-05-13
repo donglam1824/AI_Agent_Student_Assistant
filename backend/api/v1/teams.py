@@ -23,11 +23,10 @@ router = APIRouter(prefix="/teams", tags=["Teams"])
 
 @router.get("", response_model=list[TeamInfo])
 async def list_teams(limit: int = 20, current_user: User = Depends(get_current_user)):
-    _ = current_user
     try:
         from services.teams_service import get_teams_service
 
-        return await get_teams_service().list_teams(limit=limit)
+        return await get_teams_service(user_id=current_user.id).list_teams(limit=limit)
     except Exception as e:
         logger.error(f"Teams list error: {e}")
         raise HTTPException(status_code=500, detail=f"Loi khi lay danh sach Teams: {str(e)}")
@@ -39,11 +38,10 @@ async def list_channels(
     limit: int = 20,
     current_user: User = Depends(get_current_user),
 ):
-    _ = current_user
     try:
         from services.teams_service import get_teams_service
 
-        return await get_teams_service().list_channels(team_id=team_id, limit=limit)
+        return await get_teams_service(user_id=current_user.id).list_channels(team_id=team_id, limit=limit)
     except Exception as e:
         logger.error(f"Teams channel list error: {e}")
         raise HTTPException(status_code=500, detail=f"Loi khi lay danh sach kenh: {str(e)}")
@@ -51,11 +49,10 @@ async def list_channels(
 
 @router.get("/classes", response_model=list[EducationClassInfo])
 async def list_classes(limit: int = 20, current_user: User = Depends(get_current_user)):
-    _ = current_user
     try:
         from services.teams_service import get_teams_service
 
-        return await get_teams_service().list_classes(limit=limit)
+        return await get_teams_service(user_id=current_user.id).list_classes(limit=limit)
     except Exception as e:
         logger.error(f"Teams classes list error: {e}")
         raise HTTPException(status_code=500, detail=f"Loi khi lay danh sach lop: {str(e)}")
@@ -68,11 +65,10 @@ async def list_channel_messages(
     limit: int = 10,
     current_user: User = Depends(get_current_user),
 ):
-    _ = current_user
     try:
         from services.teams_service import get_teams_service
 
-        return await get_teams_service().list_channel_messages(
+        return await get_teams_service(user_id=current_user.id).list_channel_messages(
             team_id=team_id,
             channel_id=channel_id,
             limit=limit,
@@ -88,11 +84,10 @@ async def list_assignments(
     limit: int = 20,
     current_user: User = Depends(get_current_user),
 ):
-    _ = current_user
     try:
         from services.teams_service import get_teams_service
 
-        return await get_teams_service().list_assignments(class_id=class_id, limit=limit)
+        return await get_teams_service(user_id=current_user.id).list_assignments(class_id=class_id, limit=limit)
     except Exception as e:
         logger.error(f"Teams assignment list error: {e}")
         raise HTTPException(status_code=500, detail=f"Loi khi lay bai tap Teams: {str(e)}")

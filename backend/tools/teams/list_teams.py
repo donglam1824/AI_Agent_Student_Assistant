@@ -20,11 +20,11 @@ def list_teams(limit: int = 20, config: RunnableConfig = None) -> str:
     Args:
         limit: So lop/nhom toi da can lay.
     """
-    _ = config
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
         from services.teams_service import get_teams_service
 
-        teams = asyncio.run(get_teams_service().list_teams(limit=limit))
+        teams = asyncio.run(get_teams_service(user_id=user_id).list_teams(limit=limit))
         if not teams:
             return "Khong tim thay lop/nhom Teams nao."
 

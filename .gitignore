@@ -216,3 +216,6 @@ token_google_*.json
 client_secret_*.json
 
 report/
+
+
+.vscode/

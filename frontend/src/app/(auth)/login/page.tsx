@@ -39,7 +39,7 @@ export default function LoginPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  const handleGoogleLogin = useGoogleLogin({
+  const googleLoginOptions = {
     flow: "auth-code",           // Lấy authorization_code để backend exchange lấy refresh_token
     scope: GOOGLE_SCOPES,
     access_type: "offline",      // Bắt buộc để nhận refresh_token
@@ -47,7 +47,7 @@ export default function LoginPage() {
     redirect_uri: typeof window !== "undefined"
       ? window.location.origin
       : "http://localhost:3000",
-    onSuccess: async (codeResponse) => {
+    onSuccess: async (codeResponse: { code: string }) => {
       try {
         setIsLoading(true);
         setErrorMsg(null);
@@ -78,12 +78,14 @@ export default function LoginPage() {
         setIsLoading(false);
       }
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       console.error("Google OAuth error:", error);
       setErrorMsg("Google từ chối xác thực. Vui lòng thử lại.");
       setIsLoading(false);
     },
-  });
+  } as unknown as Parameters<typeof useGoogleLogin>[0];
+
+  const handleGoogleLogin = useGoogleLogin(googleLoginOptions);
 
   const onClickLogin = () => {
     setIsLoading(true);
