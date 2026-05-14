@@ -106,7 +106,7 @@ export default function EmailPage() {
       <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
         <div>
           <h2 className="text-xl font-semibold text-text-primary">
-            📧 Email học thuật
+            📧 Email
           </h2>
           <p className="text-sm text-text-secondary mt-1">
             Quản lý email từ giảng viên và nhà trường

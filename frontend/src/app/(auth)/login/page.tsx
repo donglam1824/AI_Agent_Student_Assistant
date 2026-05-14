@@ -16,7 +16,7 @@ import { useGoogleLogin } from "@react-oauth/google";
 const FEATURES = [
   { icon: Calendar, label: "Quản lý lịch học", desc: "Tạo, xem lịch qua Google Calendar" },
   { icon: StickyNote, label: "Ghi chú thông minh", desc: "Ghi chú lưu trên Google Tasks" },
-  { icon: Mail, label: "Email học thuật", desc: "Đọc, tóm tắt, soạn email Gmail" },
+  { icon: Mail, label: "Email", desc: "Đọc, tóm tắt, soạn email" },
   { icon: BookOpen, label: "Tìm kiếm tài liệu", desc: "Hỏi đáp từ PDF, DOCX, TXT" },
 ];
 

@@ -101,7 +101,7 @@ export function EmailPanel({ isOpen, onClose }: EmailPanelProps) {
       <div className="fixed right-0 top-0 bottom-0 w-[400px] max-w-[90vw] bg-gray-50 dark:bg-gray-900 z-50 shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-800 animate-slide-left">
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
           <h2 className="text-lg font-bold flex items-center gap-2">
-            <span>📧</span> Email Học Thuật
+            <span>📧</span> Email
           </h2>
           <button 
             onClick={onClose}
@@ -118,7 +118,7 @@ export function EmailPanel({ isOpen, onClose }: EmailPanelProps) {
             </div>
           ) : emails.length === 0 ? (
             <div className="text-center text-gray-500 dark:text-gray-400 mt-10">
-              Không có email học thuật nào gần đây.
+              Không có email nào gần đây.
             </div>
           ) : (
             <>

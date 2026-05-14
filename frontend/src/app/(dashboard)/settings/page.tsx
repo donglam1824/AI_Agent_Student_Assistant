@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { user, clearAuth } = useAppStore();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [connections, setConnections] = useState<ConnectionStatus | null>(null);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
     void loadConnections();
   }, []);
 
@@ -104,7 +106,7 @@ export default function SettingsPage() {
                 className={cn(
                   "flex flex-col items-center gap-2 p-4 rounded-xl",
                   "border transition-all duration-200",
-                  theme === value
+                  mounted && theme === value
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-border text-text-secondary hover:border-border-hover hover:bg-bg-elevated"
                 )}
@@ -164,7 +166,7 @@ export default function SettingsPage() {
 
         <section className="rounded-xl border border-border bg-bg-secondary p-5">
           <h3 className="text-sm font-semibold text-text-primary mb-3">
-            Ket noi dich vu
+            Kết nối dịch vụ
           </h3>
           {connectionError && (
             <div className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
@@ -181,11 +183,11 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <p className="text-xs text-text-secondary">
-                  Gmail, Calendar va Drive dang dung qua dang nhap Google.
+                  Gmail, Calendar và Drive đang dùng qua đăng nhập Google.
                 </p>
               </div>
               <span className="text-xs text-text-secondary">
-                {connections?.google_connected ? "Da ket noi" : "Chua ket noi"}
+                {connections?.google_connected ? "Đã kết nối" : "Chưa kết nối"}
               </span>
             </div>
 
@@ -198,7 +200,7 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <p className="text-xs text-text-secondary">
-                  Outlook, Teams, tin nhan lop va bai tap.
+                  Outlook, Teams, tin nhắn lớp va bài tập.
                 </p>
                 {connections?.microsoft_account_email && (
                   <p className="text-xs text-text-secondary mt-1">
@@ -217,7 +219,7 @@ export default function SettingsPage() {
                   )}
                 >
                   {connectionLoading ? <Loader2 size={14} className="animate-spin" /> : <Unplug size={14} />}
-                  Ngat
+                  Ngắt
                 </button>
               ) : (
                 <button
@@ -230,7 +232,7 @@ export default function SettingsPage() {
                   )}
                 >
                   {connectionLoading ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />}
-                  Ket noi
+                  Kết nối
                 </button>
               )}
             </div>

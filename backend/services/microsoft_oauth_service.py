@@ -35,6 +35,11 @@ def get_microsoft_scopes() -> list[str]:
     return [scope for scope in settings.microsoft_scopes.split(" ") if scope.strip()]
 
 
+def get_microsoft_graph_scopes() -> list[str]:
+    reserved = {"openid", "profile", "offline_access"}
+    return [scope for scope in get_microsoft_scopes() if scope not in reserved]
+
+
 def build_authorization_url(redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
     if not settings.azure_client_id:
         raise ValueError("MS_CLIENT_ID/AZURE_CLIENT_ID is not configured.")
@@ -65,7 +70,7 @@ def _confidential_app() -> msal.ConfidentialClientApplication:
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
     result = _confidential_app().acquire_token_by_authorization_code(
         code=code,
-        scopes=get_microsoft_scopes(),
+        scopes=get_microsoft_graph_scopes(),
         redirect_uri=redirect_uri,
     )
     if "access_token" not in result:
@@ -76,7 +81,7 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
 def refresh_microsoft_tokens(refresh_token: str) -> dict:
     result = _confidential_app().acquire_token_by_refresh_token(
         refresh_token=refresh_token,
-        scopes=get_microsoft_scopes(),
+        scopes=get_microsoft_graph_scopes(),
     )
     if "access_token" not in result:
         raise ValueError(result.get("error_description") or "Microsoft token refresh failed.")

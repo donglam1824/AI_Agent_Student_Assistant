@@ -17,7 +17,7 @@ function getErrorMessage(err: unknown, fallback: string) {
 export default function MicrosoftCallbackPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const [message, setMessage] = useState("Dang ket noi Microsoft...");
+  const [message, setMessage] = useState("Đang kết nối Microsoft...");
 
   useEffect(() => {
     const run = async () => {
@@ -28,7 +28,7 @@ export default function MicrosoftCallbackPage() {
         return;
       }
       if (!code) {
-        setMessage("Khong tim thay authorization code tu Microsoft.");
+        setMessage("Không tìm thấy authorization code từ Microsoft.");
         return;
       }
 
@@ -37,7 +37,7 @@ export default function MicrosoftCallbackPage() {
         await connectMicrosoft(code, redirectUri);
         router.replace("/settings?microsoft=connected");
       } catch (err: unknown) {
-        setMessage(getErrorMessage(err, "Ket noi Microsoft that bai."));
+        setMessage(getErrorMessage(err, "Kết nối Microsoft thất bại."));
       }
     };
 

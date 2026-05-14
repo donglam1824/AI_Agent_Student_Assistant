@@ -12,8 +12,6 @@ import pytz
 from core.logger import logger
 from db.database import SessionLocal
 from db.models import User
-from services.google_email_service import GoogleEmailService
-from services.email_analyzer import analyze_and_store_emails
 
 # Khởi tạo scheduler
 scheduler = BackgroundScheduler(timezone=pytz.utc)
@@ -41,6 +39,8 @@ def scan_academic_emails(user_id: str, scan_session: str):
             from datetime import timedelta
             last_scan = datetime.now(timezone.utc) - timedelta(days=1)
             
+        from services.google_email_service import GoogleEmailService
+
         email_svc = GoogleEmailService(user_id)
         emails = email_svc.get_emails_since(last_scan, limit=20)
         
@@ -73,6 +73,8 @@ def scan_academic_emails(user_id: str, scan_session: str):
                     filtered_emails.append(e)
             
             if filtered_emails:
+                from services.email_analyzer import analyze_and_store_emails
+
                 analyze_and_store_emails(user_id, filtered_emails, scan_session)
             
         # Cập nhật last_scan

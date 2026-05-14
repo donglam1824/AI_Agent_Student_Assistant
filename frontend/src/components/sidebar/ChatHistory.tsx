@@ -66,30 +66,31 @@ export function ChatHistory({
                 {dateLabel}
               </p>
               {chats.map((chat) => (
-                <button
+                <div
                   key={chat.id}
-                  onClick={() => onSelectChat(chat.id)}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left group",
+                    "w-full flex items-center gap-1 rounded-lg group",
                     "transition-colors duration-150",
                     activeChatId === chat.id
                       ? "bg-accent/10 text-accent"
                       : "text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
                   )}
                 >
-                  <MessageSquare size={14} className="flex-shrink-0 opacity-60" />
-                  <span className="text-xs truncate flex-1">{chat.title}</span>
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteChat(chat.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-error/10 hover:text-error transition-all"
+                    onClick={() => onSelectChat(chat.id)}
+                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 text-left"
+                  >
+                    <MessageSquare size={14} className="flex-shrink-0 opacity-60" />
+                    <span className="text-xs truncate flex-1">{chat.title}</span>
+                  </button>
+                  <button
+                    onClick={() => onDeleteChat(chat.id)}
+                    className="mr-1 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-error/10 hover:text-error transition-all"
                     aria-label="Xóa"
                   >
                     <Trash2 size={12} />
                   </button>
-                </button>
+                </div>
               ))}
             </div>
           ))

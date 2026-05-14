@@ -220,14 +220,14 @@ async def connect_microsoft(
         save_microsoft_tokens(db=db, user_id=current_user.id, token_result=result)
         user = crud.get_user_by_id(db, current_user.id)
         return {
-            "message": "Da ket noi Microsoft thanh cong.",
+            "message": "Đã kết nối Microsoft thành công.",
             "microsoft_account_email": user.microsoft_account_email if user else None,
         }
     except Exception as e:
         logger.error(f"[auth] Microsoft connect failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Khong the ket noi Microsoft: {str(e)}",
+            detail=f"Không thể kế nối tới Microsoft: {str(e)}",
         )
 
 

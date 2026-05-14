@@ -1,3 +1,7 @@
-from core.llm_manager import llm_manager
+"""Core package.
 
-__all__ = ["llm_manager"]
+Keep this package initializer lightweight. Importing shared modules such as
+``core.logger`` or ``core.security`` should not eagerly load the LLM stack.
+"""
+
+__all__: list[str] = []
