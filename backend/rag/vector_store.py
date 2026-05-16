@@ -38,6 +38,13 @@ class VectorStore:
         logger.info(f"VectorStore: đã thêm {len(documents)} chunks")
         return len(documents)
 
+    def delete_by_metadata(self, where: Dict[str, Any]) -> None:
+        """Delete chunks matching a Chroma metadata filter."""
+        if not where:
+            return
+        self._db._collection.delete(where=where)
+        logger.info(f"VectorStore: deleted chunks where={where}")
+
     def similarity_search_with_score(
         self, query: str, k: int = 5, filter: Optional[Dict[str, Any]] = None
     ) -> List[tuple[Document, float]]:

@@ -9,20 +9,22 @@ Thay vào đó, nó trả về hướng dẫn rõ ràng cho user thực hiện
 qua giao diện web, hoặc lấy danh sách drive docs đã import.
 """
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from services.doc_search_service import get_doc_search_service
 from core.logger import logger
 
 
 @tool
-def list_drive_documents() -> str:
+def list_drive_documents(config: RunnableConfig = None) -> str:
     """
     Liệt kê các tài liệu đã được import từ Google Drive vào hệ thống.
     Khác với list_documents (liệt kê TẤT CẢ), tool này chỉ hiển thị
     các tài liệu có nguồn gốc từ Google Drive.
     """
     service = get_doc_search_service()
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
-        all_docs = service.list_documents()
+        all_docs = service.list_documents(user_id=user_id)
         drive_docs = [d for d in all_docs if d.get("source_type") == "google_drive"]
 
         if not drive_docs:

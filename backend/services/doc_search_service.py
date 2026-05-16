@@ -49,7 +49,8 @@ class DocSearchService:
                     source_type TEXT DEFAULT 'manual_upload',
                     drive_file_id TEXT,
                     drive_modified_time TEXT,
-                    drive_mime_type TEXT
+                    drive_mime_type TEXT,
+                    user_id TEXT
                 )
             """)
             # Migration: thêm cột mới nếu chưa có (cho DB cũ)
@@ -65,6 +66,7 @@ class DocSearchService:
             ("drive_file_id",      "TEXT"),
             ("drive_modified_time","TEXT"),
             ("drive_mime_type",    "TEXT"),
+            ("user_id",            "TEXT"),
         ]
         for col_name, col_def in migrations:
             if col_name not in existing_columns:
@@ -80,33 +82,45 @@ class DocSearchService:
         drive_file_id: Optional[str] = None,
         drive_modified_time: Optional[str] = None,
         drive_mime_type: Optional[str] = None,
+        user_id: Optional[str] = None,
     ):
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute(
                 """INSERT INTO documents
                    (file_name, file_path, num_chunks, uploaded_at,
-                    source_type, drive_file_id, drive_modified_time, drive_mime_type)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                    source_type, drive_file_id, drive_modified_time, drive_mime_type, user_id)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
                 (
                     file_name, file_path, num_chunks,
                     datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    source_type, drive_file_id, drive_modified_time, drive_mime_type,
+                    source_type, drive_file_id, drive_modified_time, drive_mime_type, user_id,
                 ),
             )
 
-    def _delete_metadata_by_drive_id(self, drive_file_id: str):
+    def _delete_metadata_by_drive_id(self, drive_file_id: str, user_id: Optional[str] = None):
         """Xóa record metadata theo drive_file_id (dùng khi re-sync)."""
         with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("DELETE FROM documents WHERE drive_file_id=?", (drive_file_id,))
+            if user_id:
+                conn.execute("DELETE FROM documents WHERE drive_file_id=? AND user_id=?", (drive_file_id, user_id))
+            else:
+                conn.execute("DELETE FROM documents WHERE drive_file_id=?", (drive_file_id,))
 
-    def list_documents(self) -> List[Dict]:
+    def list_documents(self, user_id: Optional[str] = None) -> List[Dict]:
         """Trả về danh sách tài liệu đã upload (cả manual và Drive)."""
         with sqlite3.connect(DB_PATH) as conn:
-            rows = conn.execute(
-                """SELECT file_name, num_chunks, uploaded_at,
-                          source_type, drive_file_id, drive_modified_time
-                   FROM documents ORDER BY id DESC"""
-            ).fetchall()
+            if user_id:
+                rows = conn.execute(
+                    """SELECT file_name, num_chunks, uploaded_at,
+                              source_type, drive_file_id, drive_modified_time
+                       FROM documents WHERE user_id=? ORDER BY id DESC""",
+                    (user_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT file_name, num_chunks, uploaded_at,
+                              source_type, drive_file_id, drive_modified_time
+                       FROM documents ORDER BY id DESC"""
+                ).fetchall()
         return [
             {
                 "file_name": r[0],
@@ -119,13 +133,19 @@ class DocSearchService:
             for r in rows
         ]
 
-    def get_drive_document(self, drive_file_id: str) -> Optional[Dict]:
+    def get_drive_document(self, drive_file_id: str, user_id: Optional[str] = None) -> Optional[Dict]:
         """Lấy metadata của document theo drive_file_id."""
         with sqlite3.connect(DB_PATH) as conn:
-            row = conn.execute(
-                "SELECT file_name, num_chunks, uploaded_at, drive_modified_time FROM documents WHERE drive_file_id=?",
-                (drive_file_id,),
-            ).fetchone()
+            if user_id:
+                row = conn.execute(
+                    "SELECT file_name, num_chunks, uploaded_at, drive_modified_time FROM documents WHERE drive_file_id=? AND user_id=?",
+                    (drive_file_id, user_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT file_name, num_chunks, uploaded_at, drive_modified_time FROM documents WHERE drive_file_id=?",
+                    (drive_file_id,),
+                ).fetchone()
         if not row:
             return None
         return {
@@ -137,7 +157,7 @@ class DocSearchService:
 
     # ── Core operations: Manual Upload ─────────────────────────────
 
-    def upload(self, file_path: str) -> str:
+    def upload(self, file_path: str, user_id: Optional[str] = None) -> str:
         """Load file → embed → lưu vào ChromaDB + SQLite."""
         path = Path(file_path)
         logger.info(f"DocSearchService.upload: {path.name}")
@@ -146,9 +166,13 @@ class DocSearchService:
         if not chunks:
             return f"Không thể đọc nội dung từ file {path.name}."
 
+        if user_id:
+            for chunk in chunks:
+                chunk.metadata.update({"user_id": user_id})
+
         store = get_vector_store()
         num_added = store.add_documents(chunks)
-        self._save_metadata(path.name, str(path), num_added, source_type=SOURCE_MANUAL)
+        self._save_metadata(path.name, str(path), num_added, source_type=SOURCE_MANUAL, user_id=user_id)
 
         return (
             f"✅ Đã nạp tài liệu '{path.name}' thành công!\n"
@@ -162,6 +186,7 @@ class DocSearchService:
         file_ids: List[str],
         access_token: str,
         refresh_token: str = "",
+        user_id: Optional[str] = None,
     ) -> List[Dict]:
         """
         Import danh sách file từ Google Drive vào RAG.
@@ -213,6 +238,8 @@ class DocSearchService:
                     "drive_modified_time": modified_time,
                     "drive_mime_type": mime_type,
                 }
+                if user_id:
+                    chunk_metadata["user_id"] = user_id
 
                 # Chunk theo loại file
                 if ext in (".txt", ".csv"):
@@ -227,7 +254,11 @@ class DocSearchService:
                     continue
 
                 # Xóa chunks cũ nếu đã import trước đó (re-import)
-                self._delete_metadata_by_drive_id(file_id)
+                delete_filter = {"drive_file_id": file_id}
+                if user_id:
+                    delete_filter = {"$and": [{"drive_file_id": file_id}, {"user_id": user_id}]}
+                store.delete_by_metadata(delete_filter)
+                self._delete_metadata_by_drive_id(file_id, user_id=user_id)
 
                 # Lưu vào ChromaDB
                 store.add_documents(chunks)
@@ -242,6 +273,7 @@ class DocSearchService:
                     drive_file_id=file_id,
                     drive_modified_time=modified_time,
                     drive_mime_type=mime_type,
+                    user_id=user_id,
                 )
 
                 result.update({"status": "success", "num_chunks": num_chunks})
@@ -260,6 +292,7 @@ class DocSearchService:
         file_id: str,
         access_token: str,
         refresh_token: str = "",
+        user_id: Optional[str] = None,
     ) -> Dict:
         """
         Re-sync một file Drive đã import (kiểm tra modifiedTime trước).
@@ -279,7 +312,7 @@ class DocSearchService:
             current_modified = meta.get("modifiedTime", "")
 
             # So sánh với version đã lưu
-            existing = self.get_drive_document(file_id)
+            existing = self.get_drive_document(file_id, user_id=user_id)
             if existing and existing.get("drive_modified_time") == current_modified:
                 return {
                     "status": "skipped",
@@ -288,7 +321,7 @@ class DocSearchService:
                 }
 
             # Re-import
-            results = self.import_from_drive([file_id], access_token, refresh_token)
+            results = self.import_from_drive([file_id], access_token, refresh_token, user_id=user_id)
             r = results[0]
             if r["status"] == "success":
                 return {
@@ -305,9 +338,9 @@ class DocSearchService:
 
     # ── Search ─────────────────────────────────────────────────────
 
-    def search(self, query: str, document_name: Optional[str] = None) -> str:
+    def search(self, query: str, document_name: Optional[str] = None, user_id: Optional[str] = None) -> str:
         """Tìm kiếm tài liệu liên quan và trả về context."""
-        docs = self._retriever.retrieve(query, document_name=document_name)
+        docs = self._retriever.retrieve(query, document_name=document_name, user_id=user_id)
         return self._retriever.format_context(docs)
 
 

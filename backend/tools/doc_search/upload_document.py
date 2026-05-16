@@ -4,12 +4,13 @@ tools/doc_search/upload_document.py
 LangChain tool: upload và index tài liệu vào ChromaDB.
 """
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from services.doc_search_service import get_doc_search_service
 from core.logger import logger
 
 
 @tool
-def upload_document(file_path: str) -> str:
+def upload_document(file_path: str, config: RunnableConfig = None) -> str:
     """
     Upload và lưu tài liệu vào hệ thống tìm kiếm.
     Hỗ trợ định dạng: PDF, DOCX, TXT.
@@ -19,8 +20,9 @@ def upload_document(file_path: str) -> str:
                    Ví dụ: C:/Users/user/Downloads/giai_tich.pdf
     """
     service = get_doc_search_service()
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
-        return service.upload(file_path)
+        return service.upload(file_path, user_id=user_id)
     except FileNotFoundError as e:
         return f"❌ Không tìm thấy file: {e}"
     except ValueError as e:

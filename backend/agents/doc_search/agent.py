@@ -44,7 +44,8 @@ DOC_SEARCH_TOOLS = [upload_document, search_documents, list_documents, list_driv
 class DocSearchAgent:
     """LangGraph-based Document Search Agent."""
 
-    def __init__(self) -> None:
+    def __init__(self, user_id: str | None = None) -> None:
+        self._user_id = user_id
         self._llm_with_tools = llm_manager.get_with_tools(
             task="rag",
             tools=DOC_SEARCH_TOOLS,
@@ -78,6 +79,7 @@ class DocSearchAgent:
             "action_result": "",
         }
 
-        logger.info(f"DocSearchAgent.run – query: {user_message!r}")
-        final_state = self._graph.invoke(initial_state)
+        config = {"configurable": {"user_id": self._user_id}} if self._user_id else None
+        logger.info(f"DocSearchAgent.run - user={self._user_id}, query={user_message!r}")
+        final_state = self._graph.invoke(initial_state, config=config)
         return final_state["messages"][-1].content

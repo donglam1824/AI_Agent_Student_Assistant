@@ -17,7 +17,12 @@ class Retriever:
         self._k = k
         self._score_threshold = score_threshold
 
-    def retrieve(self, query: str, document_name: Optional[str] = None) -> List[Document]:
+    def retrieve(
+        self,
+        query: str,
+        document_name: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> List[Document]:
         """Trả về top-k chunks liên quan nhất, lọc theo score threshold và metadata (tùy chọn)."""
         store = get_vector_store()
         if store.count() == 0:
@@ -25,9 +30,17 @@ class Retriever:
             return []
 
         # Xây dựng filter theo document_name nếu có
-        filter_dict = None
+        filters = []
         if document_name:
-            filter_dict = {"source": document_name}
+            filters.append({"source": document_name})
+        if user_id:
+            filters.append({"user_id": user_id})
+
+        filter_dict = None
+        if len(filters) == 1:
+            filter_dict = filters[0]
+        elif len(filters) > 1:
+            filter_dict = {"$and": filters}
         
         results_with_score = store.similarity_search_with_score(
             query=query, k=self._k, filter=filter_dict

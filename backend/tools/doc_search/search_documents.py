@@ -6,12 +6,13 @@ Có hỗ trợ metadata filter.
 """
 from typing import Optional
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from services.doc_search_service import get_doc_search_service
 from core.logger import logger
 
 
 @tool
-def search_documents(query: str, document_name: Optional[str] = None) -> str:
+def search_documents(query: str, document_name: Optional[str] = None, config: RunnableConfig = None) -> str:
     """
     Tìm kiếm thông tin trong các tài liệu đã upload theo ngữ nghĩa.
     Trả về các đoạn văn liên quan nhất từ tài liệu. Có thể lọc theo tên file.
@@ -23,8 +24,9 @@ def search_documents(query: str, document_name: Optional[str] = None) -> str:
                Ví dụ: "giai_tich_co_ban.txt"
     """
     service = get_doc_search_service()
+    user_id = (config or {}).get("configurable", {}).get("user_id")
     try:
-        return service.search(query, document_name=document_name)
+        return service.search(query, document_name=document_name, user_id=user_id)
     except Exception as e:
         logger.error(f"search_documents error: {e}")
         return f"❌ Lỗi khi tìm kiếm: {e}"

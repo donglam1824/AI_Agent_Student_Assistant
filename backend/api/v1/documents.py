@@ -80,7 +80,7 @@ class DriveSyncResponse(BaseModel):
 
 # ── Background Task (Manual Upload) ──────────────────────────────────────
 
-def _process_document(doc_id: str, file_path: str, db_url: str):
+def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
     """
     Background task: parse → chunk → embed → store in ChromaDB.
     Updates document status in DB when done.
@@ -99,6 +99,9 @@ def _process_document(doc_id: str, file_path: str, db_url: str):
         if not chunks:
             crud.update_document_status(db, doc_id, "error", error_message="Không thể đọc nội dung file.")
             return
+
+        for chunk in chunks:
+            chunk.metadata.update({"doc_id": doc_id, "user_id": user_id})
 
         vector_store = get_vector_store()
         vector_store.add_documents(chunks)
@@ -165,7 +168,7 @@ async def upload_document(
     )
 
     from db.database import DATABASE_URL
-    background_tasks.add_task(_process_document, doc.id, file_path, DATABASE_URL)
+    background_tasks.add_task(_process_document, doc.id, file_path, DATABASE_URL, current_user.id)
 
     return DocumentResponse(
         id=doc.id,
@@ -211,8 +214,14 @@ async def delete_document(
     if not any(d.id == doc_id for d in docs):
         raise HTTPException(status_code=404, detail="Tai lieu khong ton tai.")
 
+    try:
+        from rag.vector_store import get_vector_store
+        get_vector_store().delete_by_metadata({"doc_id": doc_id})
+    except Exception as e:
+        logger.error(f"Delete document vectors error: {e}")
+        raise HTTPException(status_code=500, detail=f"Khong the xoa vector cua tai lieu: {str(e)}")
+
     crud.delete_document(db, doc_id)
-    # TODO: Also remove vectors from ChromaDB by metadata filter
 
     return {"message": "Da xoa tai lieu."}
 
@@ -309,6 +318,7 @@ async def import_drive_files(
             file_ids=body.file_ids,
             access_token=access_token,
             refresh_token=refresh_token,
+            user_id=current_user.id,
         )
     except Exception as e:
         logger.error(f"[/drive/import] error: {e}")
@@ -346,6 +356,7 @@ async def sync_drive_file(
             file_id=file_id,
             access_token=access_token,
             refresh_token=refresh_token,
+            user_id=current_user.id,
         )
     except Exception as e:
         logger.error(f"[/drive/sync/{file_id}] error: {e}")

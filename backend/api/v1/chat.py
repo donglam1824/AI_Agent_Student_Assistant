@@ -97,7 +97,7 @@ def _get_agent(intent: str, user_id: str):
         return EmailAgent(user_id=user_id)
     elif intent == "docsearch":
         from agents.doc_search.agent import DocSearchAgent
-        return DocSearchAgent()
+        return DocSearchAgent(user_id=user_id)
     elif intent == "teams":
         from agents.teams.agent import TeamsAgent
         return TeamsAgent(user_id=user_id)
