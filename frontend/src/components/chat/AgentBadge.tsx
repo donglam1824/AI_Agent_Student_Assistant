@@ -11,12 +11,12 @@ const AGENT_CONFIG: Record<
   AgentType,
   { label: string; icon: typeof Calendar; colorClass: string }
 > = {
-  calendar: { label: "Lich", icon: Calendar, colorClass: "bg-blue-500/15 text-blue-400 dark:text-blue-300" },
-  note: { label: "Ghi chu", icon: StickyNote, colorClass: "bg-amber-500/15 text-amber-600 dark:text-amber-300" },
+  calendar: { label: "Calendar", icon: Calendar, colorClass: "bg-blue-500/15 text-blue-400 dark:text-blue-300" },
+  note: { label: "Note", icon: StickyNote, colorClass: "bg-amber-500/15 text-amber-600 dark:text-amber-300" },
   email: { label: "Email", icon: Mail, colorClass: "bg-purple-500/15 text-purple-600 dark:text-purple-300" },
   teams: { label: "Teams", icon: MessageSquare, colorClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300" },
-  docsearch: { label: "Tai lieu", icon: BookOpen, colorClass: "bg-orange-500/15 text-orange-600 dark:text-orange-300" },
-  unknown: { label: "Tro ly", icon: HelpCircle, colorClass: "bg-gray-500/15 text-gray-500" },
+  docsearch: { label: "Doc Search", icon: BookOpen, colorClass: "bg-orange-500/15 text-orange-600 dark:text-orange-300" },
+  unknown: { label: "Unknown", icon: HelpCircle, colorClass: "bg-gray-500/15 text-gray-500" },
 };
 
 interface AgentBadgeProps {

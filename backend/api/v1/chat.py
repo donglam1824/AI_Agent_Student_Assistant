@@ -9,6 +9,8 @@ Chat endpoint with Server-Sent Events (SSE) streaming.
 """
 
 import json
+import re
+import unicodedata
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -49,39 +51,128 @@ class MessageResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
+VALID_INTENTS = {"calendar", "note", "email", "docsearch", "teams", "unknown"}
+
+
+def _normalize_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFD", text.lower())
+    return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+
+
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+def _keyword_intent(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    normalized = _normalize_text(text)
+
+    calendar_keywords = (
+        "lịch", "lich", "calendar", "thời khóa biểu", "thoi khoa bieu",
+        "lịch học", "lich hoc", "cuộc họp", "cuoc hop", "sự kiện",
+        "su kien", "hẹn", "hen", "deadline",
+    )
+    note_keywords = (
+        "ghi chú", "ghi chu", "note", "lưu lại", "luu lai", "lưu ghi chú",
+        "luu ghi chu", "tạo ghi chú", "tao ghi chu", "xem ghi chú",
+        "xem ghi chu", "liệt kê ghi chú", "liet ke ghi chu",
+    )
+    email_keywords = (
+        "email", "gmail", "hộp thư", "hop thu", "soạn thư", "soan thu",
+        "gửi mail", "gui mail", "gửi email", "gui email", "trả lời mail",
+        "tra loi mail", "thư phản hồi", "thu phan hoi",
+    )
+    teams_keywords = (
+        "microsoft teams", "teams", "lớp teams", "lop teams",
+        "kênh teams", "kenh teams", "tin nhắn lớp", "tin nhan lop",
+        "bài tập teams", "bai tap teams",
+    )
+    if _contains_any(text_lower, note_keywords) or _contains_any(normalized, note_keywords):
+        return "note"
+    if _contains_any(text_lower, email_keywords) or _contains_any(normalized, email_keywords):
+        return "email"
+    if _contains_any(text_lower, teams_keywords) or _contains_any(normalized, teams_keywords):
+        return "teams"
+
+    docsearch_keywords = (
+        "tài liệu", "tai lieu", "tệp", "tep", "file", "pdf", "docx", "txt",
+        "upload", "tải lên", "tai len", "đã tải", "da tai", "slide",
+        "giáo trình", "giao trinh", "trong tài liệu", "trong tai lieu",
+        "trong file", "trong pdf",
+    )
+    study_summary_keywords = (
+        "tóm tắt chương", "tom tat chuong", "tóm tắt bài", "tom tat bai",
+        "tóm tắt môn", "tom tat mon", "giải thích chương", "giai thich chuong",
+        "nội dung chương", "noi dung chuong", "ôn tập chương", "on tap chuong",
+    )
+    if (
+        _contains_any(text_lower, docsearch_keywords)
+        or _contains_any(normalized, docsearch_keywords)
+        or _contains_any(text_lower, study_summary_keywords)
+        or _contains_any(normalized, study_summary_keywords)
+    ):
+        return "docsearch"
+
+    if _contains_any(text_lower, calendar_keywords) or _contains_any(normalized, calendar_keywords):
+        return "calendar"
+
+    return None
+
+
+def _parse_llm_intent(raw_intent: str) -> str:
+    intent = raw_intent.strip().lower()
+    if intent in VALID_INTENTS:
+        return intent
+
+    mentioned = VALID_INTENTS.intersection(set(re.findall(r"[a-z]+", intent)))
+    if len(mentioned) == 1:
+        return mentioned.pop()
+    return "unknown"
+
+
 def _classify_intent(text: str) -> str:
-    """Classify user intent using LLM. Reuses logic from main.py."""
+    """Classify user intent for chat routing."""
+    keyword_intent = _keyword_intent(text)
+    if keyword_intent:
+        return keyword_intent
+
     from core.llm_manager import llm_manager
     llm = llm_manager.get("default")
     prompt = (
         "Bạn là một bộ định tuyến cực kỳ chính xác.\n"
         "Hãy phân tích câu sau của người dùng và xếp nó vào 1 trong 5 nhóm chức năng:\n"
         "1. 'calendar': Các câu hỏi liên quan đến lịch trình, thời gian biểu, hẹn hò, cuộc họp, sự kiện, dời lịch...\n"
-        "2. 'note': Các câu hỏi về việc ghi chép, tạo ghi chú lưu trữ, xem các ghi chú cũ, tóm tắt bài giảng...\n"
+        "2. 'note': Tạo, lưu, xem, liệt kê hoặc quản lý ghi chú cá nhân.\n"
         "3. 'email': Các câu hỏi yêu cầu soạn thư, gửi email, kiểm tra hòm thư, xử lý thư phản hồi...\n"
-        "4. 'docsearch': Tìm kiếm tài liệu, hỏi đáp kiến thức từ tệp tải lên, quản lý tài liệu (PDF, TXT, DOCX)...\n"
+        "4. 'docsearch': Tìm kiếm tài liệu, tóm tắt chương/bài học, hỏi đáp kiến thức từ tệp tải lên hoặc quản lý tài liệu (PDF, TXT, DOCX)...\n"
         "5. 'teams': Các câu hỏi về Microsoft Teams, lớp Teams, kênh, thông báo, tin nhắn lớp, bài tập trên Teams...\n"
         "Nếu không liên quan hoặc không thể xác định, hãy trả về 'unknown'.\n\n"
         f"Câu hỏi: \"{text}\"\n"
         "CHỈ trả về ĐÚNG 1 TỪ DUY NHẤT (lowercase) thuộc: [calendar, note, email, docsearch, teams, unknown]."
     )
     response = llm.invoke(prompt)
-    intent = response.content.strip().lower()
+    intent = _parse_llm_intent(response.content)
+    return intent if intent != "unknown" else (_keyword_intent(text) or "unknown")
 
-    if "calendar" in intent:
-        return "calendar"
-    if "note" in intent:
-        return "note"
-    if "email" in intent:
-        return "email"
-    if "docsearch" in intent or "search" in intent:
-        return "docsearch"
-    if "teams" in intent or "team" in intent:
-        return "teams"
-    text_lower = text.lower()
-    if any(keyword in text_lower for keyword in ["teams", "team", "lớp teams", "tin nhắn lớp", "bài tập teams"]):
-        return "teams"
-    return "unknown"
+
+def _coerce_response_text(response) -> str:
+    if isinstance(response, str):
+        return response
+    if isinstance(response, list):
+        parts = []
+        for item in response:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(
+                    item.get("text")
+                    or item.get("content")
+                    or json.dumps(item, ensure_ascii=False)
+                )
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part)
+    return str(response)
 
 
 def _get_agent(intent: str, user_id: str):
@@ -124,7 +215,7 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
         if agent is None:
             response_text = "Xin lỗi, mình chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn về Lịch học, Ghi chú, Email, Teams hoặc Tài liệu không?"
         else:
-            response_text = agent.run(user_input)
+            response_text = _coerce_response_text(agent.run(user_input))
 
         # Stream response token by token
         words = response_text.split(" ")

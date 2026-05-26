@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db import crud
-from db.models import User
+from db.models import User, Document
 from api.deps import get_current_user
 from core.logger import logger
 
@@ -101,6 +101,13 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
         from services.topic_classifier import TopicClassifier
         import json
 
+        doc = (
+            db.query(Document)
+            .filter(Document.id == doc_id, Document.user_id == user_id)
+            .first()
+        )
+        display_source = doc.filename if doc else os.path.basename(file_path)
+
         chunks = load_document(file_path)
         if not chunks:
             crud.update_document_status(db, doc_id, "error", error_message="Không thể đọc nội dung file.")
@@ -118,6 +125,7 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
             chunk.metadata.update({
                 "doc_id": doc_id,
                 "user_id": user_id,
+                "source": display_source,
                 "topic": topic,
                 "category": category,
                 "tags": tags_str

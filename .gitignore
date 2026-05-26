@@ -219,3 +219,8 @@ report/
 
 
 .vscode/
+
+*.db-shm
+*.db-wal
+
+backend/data/chroma_db
