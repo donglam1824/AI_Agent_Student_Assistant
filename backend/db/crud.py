@@ -240,6 +240,63 @@ def delete_document(db: Session, doc_id: str) -> bool:
     return False
 
 
+def update_document_topic(
+    db: Session,
+    doc_id: str,
+    topic: str,
+    category: str,
+    tags: list[str]
+) -> Optional[Document]:
+    import json
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if doc:
+        doc.topic = topic
+        doc.category = category
+        doc.tags = json.dumps(tags, ensure_ascii=False)
+        db.commit()
+        db.refresh(doc)
+    return doc
+
+
+def get_documents_by_category(db: Session, user_id: str, category: str) -> list[Document]:
+    return (
+        db.query(Document)
+        .filter(Document.user_id == user_id, Document.category == category)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+
+
+def get_topic_summary(db: Session, user_id: str) -> list[dict]:
+    """
+    Trả về thống kê số lượng tài liệu theo category và danh sách các topic đi kèm.
+    [{category: "Toán", count: 5, topics: ["Toán cao cấp", "Giải tích 1"]}, ...]
+    """
+    import json
+    docs = db.query(Document).filter(Document.user_id == user_id).all()
+    
+    summary_map = {}
+    for d in docs:
+        cat = d.category or "Chưa phân loại"
+        if cat not in summary_map:
+            summary_map[cat] = {"category": cat, "count": 0, "topics": set()}
+        
+        summary_map[cat]["count"] += 1
+        if d.topic:
+            summary_map[cat]["topics"].add(d.topic)
+            
+    result = []
+    for cat, data in summary_map.items():
+        result.append({
+            "category": cat,
+            "count": data["count"],
+            "topics": list(data["topics"])
+        })
+        
+    result.sort(key=lambda x: x["count"], reverse=True)
+    return result
+
+
 # ── Note (SQLite local storage) ──────────────────────────────────────────
 
 def create_note(db: Session, user_id: str, title: str, content: str = "") -> Note:

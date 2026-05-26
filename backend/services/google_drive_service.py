@@ -280,13 +280,15 @@ def build_drive_service_for_user(user) -> GoogleDriveService:
     Raises:
         ValueError: Nếu user không có Google token.
     """
-    from db.crud import decrypt_token
+    from core.crypto import decrypt_token
 
     if not user.google_access_token:
         raise ValueError(f"User {user.email} chưa có Google access token.")
 
     access_token = decrypt_token(user.google_access_token)
     refresh_token = decrypt_token(user.google_refresh_token) if user.google_refresh_token else ""
+    if not access_token:
+        raise ValueError(f"Khong the giai ma Google access token cho user {user.email}.")
 
     return GoogleDriveService(
         access_token=access_token,

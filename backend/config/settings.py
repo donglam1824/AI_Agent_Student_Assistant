@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     microsoft_scopes: str = (
         "openid profile email offline_access User.Read "
         "Mail.Read Mail.Send Team.ReadBasic.All Channel.ReadBasic.All "
-        "ChannelMessage.Read.All EduRoster.ReadBasic EduAssignments.ReadBasic"
+        "ChannelMessage.Read.All EduRoster.ReadBasic EduAssignments.ReadBasic "
+        "Files.Read"
     )
 
     # ── Google OAuth2 Web Flow ─────────────────────────────────────────────

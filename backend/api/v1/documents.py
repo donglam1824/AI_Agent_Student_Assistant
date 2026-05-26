@@ -42,6 +42,10 @@ class DocumentResponse(BaseModel):
     chunk_count: int
     status: str
     error_message: Optional[str] = None
+    topic: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
+    source_type: Optional[str] = None
     created_at: str
 
 
@@ -94,20 +98,37 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
     try:
         from rag.document_loader import load_document
         from rag.vector_store import get_vector_store
+        from services.topic_classifier import TopicClassifier
+        import json
 
         chunks = load_document(file_path)
         if not chunks:
             crud.update_document_status(db, doc_id, "error", error_message="Không thể đọc nội dung file.")
             return
 
+        # Phân loại chủ đề bằng Gemini
+        text_sample = "\n".join([c.page_content for c in chunks[:2]]) if chunks else ""
+        classification = TopicClassifier.classify(text_sample)
+        topic = classification["topic"]
+        category = classification["category"]
+        tags_list = classification["tags"]
+        tags_str = json.dumps(tags_list, ensure_ascii=False)
+
         for chunk in chunks:
-            chunk.metadata.update({"doc_id": doc_id, "user_id": user_id})
+            chunk.metadata.update({
+                "doc_id": doc_id,
+                "user_id": user_id,
+                "topic": topic,
+                "category": category,
+                "tags": tags_str
+            })
 
         vector_store = get_vector_store()
         vector_store.add_documents(chunks)
 
         crud.update_document_status(db, doc_id, "ready", chunk_count=len(chunks))
-        logger.info(f"Document {doc_id} processed: {len(chunks)} chunks")
+        crud.update_document_topic(db, doc_id, topic, category, tags_list)
+        logger.info(f"Document {doc_id} processed: {len(chunks)} chunks, topic={topic}, category={category}")
 
     except Exception as e:
         logger.error(f"Document processing error: {e}")
@@ -122,7 +143,7 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
 
 def _get_user_tokens(user: User, db: Session) -> tuple:
     """Lấy và decrypt Google access + refresh token của user."""
-    from db.crud import decrypt_token
+    from core.crypto import decrypt_token
 
     if not user.google_access_token:
         raise HTTPException(
@@ -131,7 +152,31 @@ def _get_user_tokens(user: User, db: Session) -> tuple:
         )
     access_token = decrypt_token(user.google_access_token)
     refresh_token = decrypt_token(user.google_refresh_token) if user.google_refresh_token else ""
+    if not access_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Khong the giai ma Google token. Vui long dang nhap lai.",
+        )
     return access_token, refresh_token
+
+
+def _get_user_microsoft_token(user: User, db: Session) -> str:
+    """Get a refreshed delegated Microsoft Graph access token for the current user."""
+    try:
+        from services.microsoft_oauth_service import get_user_microsoft_access_token
+
+        access_token = get_user_microsoft_access_token(db, user.id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Tai khoan chua ket noi Microsoft hoac token khong hop le: {str(e)}",
+        )
+    if not access_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Khong the lay Microsoft access token. Vui long ket noi lai Microsoft.",
+        )
+    return access_token
 
 
 # ── Manual Upload Endpoints ────────────────────────────────────────────────
@@ -177,6 +222,10 @@ async def upload_document(
         file_size=doc.file_size,
         chunk_count=doc.chunk_count,
         status=doc.status,
+        topic=doc.topic,
+        category=doc.category,
+        tags=[],
+        source_type=doc.source_type,
         created_at=doc.created_at.isoformat(),
     )
 
@@ -187,20 +236,94 @@ async def list_documents(
     db: Session = Depends(get_db),
 ):
     """List all documents for the current user."""
+    import json
     docs = crud.get_user_documents(db, current_user.id)
-    return [
-        DocumentResponse(
-            id=d.id,
-            filename=d.filename,
-            file_type=d.file_type,
-            file_size=d.file_size,
-            chunk_count=d.chunk_count,
-            status=d.status,
-            error_message=d.error_message,
-            created_at=d.created_at.isoformat(),
+    response = []
+    for d in docs:
+        tags_parsed = []
+        if d.tags:
+            try:
+                tags_parsed = json.loads(d.tags)
+            except Exception:
+                tags_parsed = []
+        response.append(
+            DocumentResponse(
+                id=d.id,
+                filename=d.filename,
+                file_type=d.file_type,
+                file_size=d.file_size,
+                chunk_count=d.chunk_count,
+                status=d.status,
+                error_message=d.error_message,
+                topic=d.topic,
+                category=d.category,
+                tags=tags_parsed,
+                source_type=d.source_type,
+                created_at=d.created_at.isoformat(),
+            )
         )
-        for d in docs
-    ]
+    return response
+
+
+@router.get("/topics")
+async def get_document_topics_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lấy thống kê số lượng tài liệu theo danh mục và chủ đề."""
+    summary = crud.get_topic_summary(db, current_user.id)
+    return summary
+
+
+class UpdateDocumentTopicRequest(BaseModel):
+    topic: str
+    category: str
+    tags: List[str]
+
+
+@router.put("/{doc_id}/topic", response_model=DocumentResponse)
+async def update_document_topic(
+    doc_id: str,
+    body: UpdateDocumentTopicRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cho phép người dùng tự chỉnh sửa chủ đề, danh mục và tags của tài liệu."""
+    docs = crud.get_user_documents(db, current_user.id)
+    doc_to_edit = None
+    for d in docs:
+        if d.id == doc_id:
+            doc_to_edit = d
+            break
+            
+    if not doc_to_edit:
+        raise HTTPException(status_code=404, detail="Tài liệu không tồn tại hoặc không thuộc quyền sở hữu của bạn.")
+        
+    import json
+    # Cập nhật trong DB
+    updated_doc = crud.update_document_topic(db, doc_id, body.topic, body.category, body.tags)
+    
+    tags_parsed = []
+    if updated_doc.tags:
+        try:
+            tags_parsed = json.loads(updated_doc.tags)
+        except Exception:
+            tags_parsed = []
+            
+    return DocumentResponse(
+        id=updated_doc.id,
+        filename=updated_doc.filename,
+        file_type=updated_doc.file_type,
+        file_size=updated_doc.file_size,
+        chunk_count=updated_doc.chunk_count,
+        status=updated_doc.status,
+        error_message=updated_doc.error_message,
+        topic=updated_doc.topic,
+        category=updated_doc.category,
+        tags=tags_parsed,
+        source_type=updated_doc.source_type,
+        created_at=updated_doc.created_at.isoformat(),
+    )
 
 
 @router.delete("/{doc_id}")
@@ -361,6 +484,133 @@ async def sync_drive_file(
     except Exception as e:
         logger.error(f"[/drive/sync/{file_id}] error: {e}")
         raise HTTPException(status_code=500, detail=f"Loi sync file Drive: {str(e)}")
+
+    return DriveSyncResponse(
+        status=result["status"],
+        num_chunks=result["num_chunks"],
+        message=result["message"],
+    )
+
+
+@router.get("/onedrive/folders", response_model=List[DriveFolderResponse])
+async def list_onedrive_folders(
+    parent_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List folders from the connected user's OneDrive."""
+    access_token = _get_user_microsoft_token(current_user, db)
+
+    from services.onedrive_service import OneDriveService
+    try:
+        svc = OneDriveService(access_token=access_token)
+        folders = svc.list_folders(parent_id=parent_id)
+    except Exception as e:
+        logger.error(f"[/onedrive/folders] error: {e}")
+        raise HTTPException(status_code=502, detail=f"Khong the ket noi OneDrive: {str(e)}")
+
+    return [DriveFolderResponse(id=f.id, name=f.name, parents=f.parents) for f in folders]
+
+
+@router.get("/onedrive/files", response_model=List[DriveFileResponse])
+async def list_onedrive_files(
+    folder_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List supported files from the connected user's OneDrive."""
+    from config.settings import settings
+    access_token = _get_user_microsoft_token(current_user, db)
+
+    from services.onedrive_service import OneDriveService
+    try:
+        svc = OneDriveService(access_token=access_token)
+        files = svc.list_files(
+            folder_id=folder_id,
+            max_results=settings.google_drive_max_files,
+        )
+    except Exception as e:
+        logger.error(f"[/onedrive/files] error: {e}")
+        raise HTTPException(status_code=502, detail=f"Khong the liet ke file tu OneDrive: {str(e)}")
+
+    return [
+        DriveFileResponse(
+            id=f.id,
+            name=f.name,
+            mime_type=f.mime_type,
+            type_label=f.type_label,
+            modified_time=f.modified_time,
+            size=f.size,
+        )
+        for f in files
+    ]
+
+
+@router.post("/onedrive/import", response_model=List[DriveImportResultItem])
+async def import_onedrive_files(
+    body: DriveImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Import selected OneDrive files into RAG."""
+    if not body.file_ids:
+        raise HTTPException(status_code=400, detail="Danh sach file_ids khong duoc rong.")
+
+    from config.settings import settings
+    if len(body.file_ids) > settings.google_drive_max_files:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Khong the import qua {settings.google_drive_max_files} file cung luc.",
+        )
+
+    access_token = _get_user_microsoft_token(current_user, db)
+
+    from services.doc_search_service import get_doc_search_service
+    svc = get_doc_search_service()
+
+    try:
+        results = svc.import_from_onedrive(
+            file_ids=body.file_ids,
+            access_token=access_token,
+            user_id=current_user.id,
+        )
+    except Exception as e:
+        logger.error(f"[/onedrive/import] error: {e}")
+        raise HTTPException(status_code=500, detail=f"Loi import tu OneDrive: {str(e)}")
+
+    return [
+        DriveImportResultItem(
+            file_id=r["file_id"],
+            file_name=r["file_name"],
+            status=r["status"],
+            num_chunks=r["num_chunks"],
+            error=r.get("error"),
+        )
+        for r in results
+    ]
+
+
+@router.post("/onedrive/sync/{file_id}", response_model=DriveSyncResponse)
+async def sync_onedrive_file(
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Re-sync a OneDrive file already imported into RAG."""
+    access_token = _get_user_microsoft_token(current_user, db)
+
+    from services.doc_search_service import get_doc_search_service
+    svc = get_doc_search_service()
+
+    try:
+        result = svc.sync_onedrive_document(
+            file_id=file_id,
+            access_token=access_token,
+            user_id=current_user.id,
+        )
+    except Exception as e:
+        logger.error(f"[/onedrive/sync/{file_id}] error: {e}")
+        raise HTTPException(status_code=500, detail=f"Loi sync file OneDrive: {str(e)}")
 
     return DriveSyncResponse(
         status=result["status"],

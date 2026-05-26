@@ -9,24 +9,32 @@ import { useEffect, useState, useCallback } from "react";
 import { DropZone } from "@/components/docs/DropZone";
 import { DocumentList } from "@/components/docs/DocumentList";
 import { DriveBrowser } from "@/components/docs/DriveBrowser";
+import { TopicOverview } from "@/components/docs/TopicOverview";
 import {
   getDocuments,
   uploadDocument,
   deleteDocument as deleteDocApi,
+  getTopicSummary,
 } from "@/lib/api";
-import type { Document } from "@/types";
+import type { Document, TopicCategorySummary } from "@/types";
 
-type Tab = "upload" | "drive";
+type Tab = "upload" | "drive" | "onedrive";
 
 export default function DocsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("upload");
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [topicSummary, setTopicSummary] = useState<TopicCategorySummary[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const loadDocuments = useCallback(() => {
     getDocuments()
       .then(setDocuments)
       .catch(() => setDocuments([]));
+
+    getTopicSummary()
+      .then(setTopicSummary)
+      .catch(() => setTopicSummary([]));
   }, []);
 
   useEffect(() => {
@@ -48,6 +56,10 @@ export default function DocsPage() {
       try {
         const doc = await uploadDocument(file);
         setDocuments((prev) => [doc, ...prev]);
+        // Trigger topic statistics refresh
+        getTopicSummary()
+          .then(setTopicSummary)
+          .catch(() => {});
       } catch (err) {
         console.error("Upload error:", err);
       } finally {
@@ -62,6 +74,10 @@ export default function DocsPage() {
       try {
         await deleteDocApi(docId);
         setDocuments((prev) => prev.filter((d) => d.id !== docId));
+        // Trigger topic statistics refresh
+        getTopicSummary()
+          .then(setTopicSummary)
+          .catch(() => {});
       } catch {
         // Silently handle
       }
@@ -69,19 +85,34 @@ export default function DocsPage() {
     []
   );
 
+  // Filter documents by selected category
+  const filteredDocuments = documents.filter((doc) => {
+    if (!selectedCategory) return true;
+    return doc.category === selectedCategory;
+  });
+
   return (
     <div className="flex-1 overflow-y-auto p-6 animate-fade-in">
       <div className="max-w-3xl mx-auto">
 
         {/* Page header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-text-primary">
-            Tài liệu của bạn
-          </h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Upload hoặc import tài liệu môn học để ORCA giúp bạn tìm kiếm thông tin
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-text-primary">
+              Tài liệu của bạn
+            </h2>
+            <p className="text-sm text-text-secondary mt-1">
+              Upload hoặc import tài liệu môn học để ORCA giúp bạn tìm kiếm thông tin
+            </p>
+          </div>
         </div>
+
+        {/* Topic overview stats dashboard */}
+        <TopicOverview
+          summary={topicSummary}
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+        />
 
         {/* Tab navigation */}
         <div className="docs-tab-nav" role="tablist">
@@ -103,6 +134,15 @@ export default function DocsPage() {
           >
             ☁️ Google Drive
           </button>
+          <button
+            id="tab-onedrive"
+            role="tab"
+            aria-selected={activeTab === "onedrive"}
+            className={`docs-tab-btn ${activeTab === "onedrive" ? "active" : ""}`}
+            onClick={() => setActiveTab("onedrive")}
+          >
+            OneDrive
+          </button>
         </div>
 
         {/* Tab content */}
@@ -119,13 +159,23 @@ export default function DocsPage() {
             </div>
 
             {/* Document list */}
-            <DocumentList documents={documents} onDelete={handleDelete} />
+            <DocumentList
+              documents={filteredDocuments}
+              onDelete={handleDelete}
+              onUpdate={loadDocuments}
+            />
           </div>
         )}
 
         {activeTab === "drive" && (
           <div className="docs-tab-content" role="tabpanel" aria-labelledby="tab-drive">
-            <DriveBrowser />
+            <DriveBrowser provider="google" />
+          </div>
+        )}
+
+        {activeTab === "onedrive" && (
+          <div className="docs-tab-content" role="tabpanel" aria-labelledby="tab-onedrive">
+            <DriveBrowser provider="onedrive" />
           </div>
         )}
 

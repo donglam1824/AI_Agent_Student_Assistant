@@ -159,6 +159,12 @@ class LLMManager:
         logger.debug(f"LLMManager.get(task={task!r}) → provider={provider_name!r}")
         return self._load_provider(provider_name)
 
+    def get_model(self, task: str = "default") -> BaseChatModel:
+        """
+        Trả về LLM phù hợp cho tác vụ `task` (alias cho get).
+        """
+        return self.get(task)
+
     def get_provider(self, provider_name: str) -> BaseChatModel:
         """
         Lấy trực tiếp LLM theo tên provider (bỏ qua routing).

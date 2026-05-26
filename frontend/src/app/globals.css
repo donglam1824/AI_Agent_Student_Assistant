@@ -20,6 +20,7 @@
 
   --text-primary: #111827;
   --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
   --text-on-accent: #ffffff;
 
   --border: #e5e7eb;
@@ -57,6 +58,7 @@
 
   --text-primary: #e8e8ed;
   --text-secondary: #8888a0;
+  --text-muted: #5b5b75;
   --text-on-accent: #ffffff;
 
   --border: #2a2a3a;
@@ -81,6 +83,7 @@
   --color-accent-light: var(--accent-light);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
   --color-text-on-accent: var(--text-on-accent);
   --color-border: var(--border);
   --color-border-hover: var(--border-hover);

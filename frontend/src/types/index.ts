@@ -50,7 +50,17 @@ export interface Document {
   chunk_count: number;
   status: DocumentStatus;
   error_message?: string | null;
+  topic?: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+  source_type?: string | null;
   created_at: string;
+}
+
+export interface TopicCategorySummary {
+  category: string;
+  count: number;
+  topics: string[];
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────────

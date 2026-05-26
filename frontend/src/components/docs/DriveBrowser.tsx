@@ -1,7 +1,5 @@
 /**
- * components/docs/DriveBrowser.tsx
- * Google Drive file browser with folder navigation and file selection.
- * Allows users to browse their Drive, select files, and import into ORCA RAG.
+ * Cloud file browser for Google Drive and OneDrive document imports.
  */
 
 "use client";
@@ -12,34 +10,66 @@ import {
   getDriveFiles,
   importDriveFiles,
   syncDriveFile,
+  getOneDriveFolders,
+  getOneDriveFiles,
+  importOneDriveFiles,
+  syncOneDriveFile,
   type DriveFolder,
   type DriveFile,
   type DriveImportResult,
 } from "@/lib/api";
 
-// ── Icon helpers ──────────────────────────────────────────────────────────
+type DriveProvider = "google" | "onedrive";
+
+interface BreadcrumbItem {
+  id: string | null;
+  name: string;
+}
+
+interface DriveBrowserProps {
+  provider?: DriveProvider;
+}
+
+const PROVIDER_CONFIG = {
+  google: {
+    title: "Google Drive",
+    rootName: "My Drive",
+    loadError: "Khong the tai noi dung Google Drive",
+    importError: "Import tu Google Drive that bai",
+    syncError: "Sync Google Drive that bai",
+    hint: "Ho tro: Google Docs, Sheets, Slides, PDF, DOCX, TXT",
+  },
+  onedrive: {
+    title: "OneDrive",
+    rootName: "OneDrive",
+    loadError: "Khong the tai noi dung OneDrive",
+    importError: "Import tu OneDrive that bai",
+    syncError: "Sync OneDrive that bai",
+    hint: "Ho tro: PDF, DOCX, TXT",
+  },
+} as const;
 
 function getMimeIcon(typeLabel: string): string {
   const icons: Record<string, string> = {
-    "Google Docs": "📄",
-    "Google Sheets": "📊",
-    "Google Slides": "📊",
-    "PDF": "📕",
-    "DOCX": "📘",
-    "TXT": "📃",
+    "Google Docs": "DOC",
+    "Google Sheets": "XLS",
+    "Google Slides": "PPT",
+    PDF: "PDF",
+    DOCX: "DOC",
+    TXT: "TXT",
   };
-  return icons[typeLabel] || "📄";
+  return icons[typeLabel] || "DOC";
 }
 
 function formatSize(bytes: number): string {
-  if (bytes === 0) return "—";
+  if (bytes === 0) return "-";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatDate(isoDate: string): string {
-  if (!isoDate) return "—";
+  if (!isoDate) return "-";
   return new Date(isoDate).toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
@@ -47,20 +77,33 @@ function formatDate(isoDate: string): string {
   });
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────
+function ProviderIcon({ provider }: { provider: DriveProvider }) {
+  if (provider === "onedrive") {
+    return (
+      <svg width="22" height="18" viewBox="0 0 22 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M8.6 4.9A5.2 5.2 0 0 1 18 8a4.9 4.9 0 0 1-.1 9.8H5.4A4.6 4.6 0 0 1 4 8.8a5.7 5.7 0 0 1 4.6-3.9Z" fill="#0078D4" />
+        <path d="M8.6 4.9A5.7 5.7 0 0 1 14 1a5.8 5.8 0 0 1 5.6 4.4A4.9 4.9 0 0 0 18 8H9.4L4 8.8a5.7 5.7 0 0 1 4.6-3.9Z" fill="#1490DF" />
+        <path d="M9.4 8H18a4.9 4.9 0 0 1-.1 9.8H9.4V8Z" fill="#0364B8" />
+      </svg>
+    );
+  }
 
-interface BreadcrumbItem {
-  id: string | null;
-  name: string;
+  return (
+    <svg width="20" height="18" viewBox="0 0 24 20" className="drive-icon" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M8.3 1.4h7.4l7.4 12.8-3.7 6.4L8.3 1.4Z" fill="#EA4335" />
+      <path d="M.9 14.2 8.3 1.4l3.7 6.4-7.4 12.8L.9 14.2Z" fill="#00AC47" />
+      <path d="M4.6 20.6h14.8l3.7-6.4H8.3L4.6 20.6Z" fill="#2684FC" />
+      <path d="m12 7.8 3.7 6.4H8.3L12 7.8Z" fill="#FFBA00" />
+    </svg>
+  );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────
-
-export function DriveBrowser() {
+export function DriveBrowser({ provider = "google" }: DriveBrowserProps) {
+  const config = PROVIDER_CONFIG[provider];
   const [folders, setFolders] = useState<DriveFolder[]>([]);
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([
-    { id: null, name: "My Drive" },
+    { id: null, name: config.rootName },
   ]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -76,8 +119,8 @@ export function DriveBrowser() {
     setError(null);
     try {
       const [foldersData, filesData] = await Promise.all([
-        getDriveFolders(folderId),
-        getDriveFiles(folderId),
+        provider === "google" ? getDriveFolders(folderId) : getOneDriveFolders(folderId),
+        provider === "google" ? getDriveFiles(folderId) : getOneDriveFiles(folderId),
       ]);
       setFolders(foldersData);
       setFiles(filesData);
@@ -85,23 +128,21 @@ export function DriveBrowser() {
       setImportResults([]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(`Không thể tải nội dung Drive: ${msg}`);
+      setError(`${config.loadError}: ${msg}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [config.loadError, provider]);
 
   useEffect(() => {
-    loadContents(currentFolderId);
-  }, []);
+    void Promise.resolve().then(() => loadContents());
+  }, [loadContents]);
 
-  // Navigate into a folder
   const navigateToFolder = (folder: DriveFolder) => {
     setBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }]);
     loadContents(folder.id);
   };
 
-  // Navigate via breadcrumb
   const navigateToBreadcrumb = (index: number) => {
     const newBreadcrumbs = breadcrumbs.slice(0, index + 1);
     setBreadcrumbs(newBreadcrumbs);
@@ -109,7 +150,6 @@ export function DriveBrowser() {
     loadContents(targetId);
   };
 
-  // Toggle file selection
   const toggleSelect = (fileId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -127,33 +167,32 @@ export function DriveBrowser() {
     }
   };
 
-  // Import selected files
   const handleImport = async () => {
     if (selectedIds.size === 0) return;
     setImporting(true);
     setImportResults([]);
     setError(null);
     try {
-      const results = await importDriveFiles(Array.from(selectedIds));
+      const ids = Array.from(selectedIds);
+      const results = provider === "google" ? await importDriveFiles(ids) : await importOneDriveFiles(ids);
       setImportResults(results);
       setSelectedIds(new Set());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(`Import thất bại: ${msg}`);
+      setError(`${config.importError}: ${msg}`);
     } finally {
       setImporting(false);
     }
   };
 
-  // Sync a single file
-  const handleSync = async (fileId: string, fileName: string) => {
+  const handleSync = async (fileId: string) => {
     setSyncing(fileId);
     try {
-      const result = await syncDriveFile(fileId);
-      alert(`${result.message}`);
+      const result = provider === "google" ? await syncDriveFile(fileId) : await syncOneDriveFile(fileId);
+      alert(result.message);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      alert(`Sync thất bại: ${msg}`);
+      alert(`${config.syncError}: ${msg}`);
     } finally {
       setSyncing(null);
     }
@@ -161,31 +200,24 @@ export function DriveBrowser() {
 
   return (
     <div className="drive-browser">
-      {/* Header */}
       <div className="drive-header">
         <div className="drive-title">
-          <svg width="20" height="20" viewBox="0 0 87.3 78" className="drive-icon">
-            <path d="M6.6 66.85L1.2 76.6a5 5 0 0 0 4.33 7.4h76.7a5 5 0 0 0 4.33-7.4l-5.4-9.75z" fill="#0066DA"/>
-            <path d="M43.65 0L6.6 66.85h37.05z" fill="#00AC47"/>
-            <path d="M43.65 0l37.05 66.85H43.65z" fill="#EA4335"/>
-            <path d="M6.6 66.85l37.05-33.43L80.7 66.85z" fill="#00832D"/>
-          </svg>
-          <span>Google Drive</span>
+          <ProviderIcon provider={provider} />
+          <span>{config.title}</span>
         </div>
         <button
           className="drive-refresh-btn"
           onClick={() => loadContents(currentFolderId)}
           disabled={loading}
-          title="Tải lại"
+          title="Tai lai"
         >
-          {loading ? "⏳" : "🔄"}
+          {loading ? "..." : "Reload"}
         </button>
       </div>
 
-      {/* Breadcrumbs */}
       <div className="drive-breadcrumbs">
         {breadcrumbs.map((crumb, i) => (
-          <span key={i} className="breadcrumb-item">
+          <span key={`${crumb.id ?? "root"}-${i}`} className="breadcrumb-item">
             {i > 0 && <span className="breadcrumb-sep">/</span>}
             <button
               className={`breadcrumb-btn ${i === breadcrumbs.length - 1 ? "active" : ""}`}
@@ -197,55 +229,40 @@ export function DriveBrowser() {
         ))}
       </div>
 
-      {/* Error */}
       {error && (
         <div className="drive-error">
-          <span>⚠️ {error}</span>
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div className="drive-loading">
           <div className="drive-spinner" />
-          <span>Đang tải...</span>
+          <span>Dang tai...</span>
         </div>
       )}
 
-      {/* Import Results */}
       {importResults.length > 0 && (
         <div className="import-results">
-          <h4>Kết quả import:</h4>
+          <h4>Ket qua import:</h4>
           {importResults.map((r) => (
-            <div
-              key={r.file_id}
-              className={`import-result-item ${r.status}`}
-            >
-              {r.status === "success" ? "✅" : "❌"}{" "}
-              <strong>{r.file_name}</strong> —{" "}
-              {r.status === "success"
-                ? `${r.num_chunks} chunks đã lưu`
-                : `Lỗi: ${r.error}`}
+            <div key={r.file_id} className={`import-result-item ${r.status}`}>
+              <strong>{r.file_name}</strong>{" "}
+              {r.status === "success" ? `${r.num_chunks} chunks da luu` : `Loi: ${r.error}`}
             </div>
           ))}
         </div>
       )}
 
-      {/* File browser */}
       {!loading && (
         <div className="drive-content">
-          {/* Folders */}
           {folders.length > 0 && (
             <div className="drive-section">
-              <p className="drive-section-label">Thư mục</p>
+              <p className="drive-section-label">Thu muc</p>
               <div className="drive-folders-grid">
                 {folders.map((folder) => (
-                  <button
-                    key={folder.id}
-                    className="drive-folder-item"
-                    onClick={() => navigateToFolder(folder)}
-                  >
-                    <span className="folder-icon">📁</span>
+                  <button key={folder.id} className="drive-folder-item" onClick={() => navigateToFolder(folder)}>
+                    <span className="folder-icon">▣</span>
                     <span className="folder-name">{folder.name}</span>
                   </button>
                 ))}
@@ -253,17 +270,12 @@ export function DriveBrowser() {
             </div>
           )}
 
-          {/* Files */}
           {files.length > 0 ? (
             <div className="drive-section">
               <div className="drive-files-header">
-                <p className="drive-section-label">
-                  Tài liệu ({files.length} file hỗ trợ)
-                </p>
+                <p className="drive-section-label">Tai lieu ({files.length} file ho tro)</p>
                 <button className="select-all-btn" onClick={toggleSelectAll}>
-                  {selectedIds.size === files.length && files.length > 0
-                    ? "Bỏ chọn tất cả"
-                    : "Chọn tất cả"}
+                  {selectedIds.size === files.length && files.length > 0 ? "Bo chon tat ca" : "Chon tat ca"}
                 </button>
               </div>
 
@@ -280,11 +292,9 @@ export function DriveBrowser() {
                       checked={selectedIds.has(file.id)}
                       onChange={() => toggleSelect(file.id)}
                       onClick={(e) => e.stopPropagation()}
-                      id={`drive-file-${file.id}`}
+                      id={`${provider}-file-${file.id}`}
                     />
-                    <span className="file-type-icon">
-                      {getMimeIcon(file.type_label)}
-                    </span>
+                    <span className="file-type-icon">{getMimeIcon(file.type_label)}</span>
                     <div className="file-info">
                       <span className="file-name">{file.name}</span>
                       <span className="file-meta">
@@ -297,36 +307,28 @@ export function DriveBrowser() {
                       className="sync-btn"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSync(file.id, file.name);
+                        handleSync(file.id);
                       }}
                       disabled={syncing === file.id}
-                      title="Re-sync file này"
+                      title="Re-sync file nay"
                     >
-                      {syncing === file.id ? "⏳" : "🔄"}
+                      {syncing === file.id ? "..." : "Sync"}
                     </button>
                   </div>
                 ))}
               </div>
 
-              {/* Import button */}
               {selectedIds.size > 0 && (
                 <div className="import-bar">
-                  <span className="import-count">
-                    {selectedIds.size} file đã chọn
-                  </span>
-                  <button
-                    className="import-btn"
-                    onClick={handleImport}
-                    disabled={importing}
-                    id="drive-import-btn"
-                  >
+                  <span className="import-count">{selectedIds.size} file da chon</span>
+                  <button className="import-btn" onClick={handleImport} disabled={importing} id={`${provider}-import-btn`}>
                     {importing ? (
                       <>
                         <span className="import-spinner" />
-                        Đang import...
+                        Dang import...
                       </>
                     ) : (
-                      <>☁️ Import vào ORCA</>
+                      <>Import vao ORCA</>
                     )}
                   </button>
                 </div>
@@ -335,10 +337,8 @@ export function DriveBrowser() {
           ) : (
             !loading && (
               <div className="drive-empty">
-                <p>Không tìm thấy tài liệu được hỗ trợ trong thư mục này.</p>
-                <p className="drive-empty-hint">
-                  Hỗ trợ: Google Docs, Sheets, Slides, PDF, DOCX, TXT
-                </p>
+                <p>Khong tim thay tai lieu duoc ho tro trong thu muc nay.</p>
+                <p className="drive-empty-hint">{config.hint}</p>
               </div>
             )
           )}

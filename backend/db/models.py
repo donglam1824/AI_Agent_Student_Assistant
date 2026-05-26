@@ -87,6 +87,18 @@ class Document(Base):
     chunk_count = Column(Integer, default=0)
     status = Column(String, default="processing")  # "processing" | "ready" | "error"
     error_message = Column(Text, nullable=True)
+    
+    # Topic classification fields
+    topic = Column(String, nullable=True)       # "Toán cao cấp"
+    category = Column(String, nullable=True)    # "Toán"  
+    tags = Column(Text, nullable=True)          # JSON array string: '["đại số", "ma trận"]'
+    
+    # Cloud source fields (if imported from Drive/OneDrive)
+    source_type = Column(String, default="manual_upload") # "manual_upload" | "google_drive" | "onedrive"
+    drive_file_id = Column(String, nullable=True)
+    drive_modified_time = Column(String, nullable=True)
+    drive_mime_type = Column(String, nullable=True)
+    
     created_at = Column(DateTime, default=_utcnow)
 
     # Relationships

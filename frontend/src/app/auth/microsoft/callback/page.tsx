@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { connectMicrosoft } from "@/lib/api";
@@ -14,7 +14,7 @@ function getErrorMessage(err: unknown, fallback: string) {
   return fallback;
 }
 
-export default function MicrosoftCallbackPage() {
+function MicrosoftCallbackContent() {
   const router = useRouter();
   const params = useSearchParams();
   const [message, setMessage] = useState("Đang kết nối Microsoft...");
@@ -51,5 +51,20 @@ export default function MicrosoftCallbackPage() {
         <p className="text-sm text-text-primary">{message}</p>
       </div>
     </div>
+  );
+}
+
+export default function MicrosoftCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-bg-primary p-6">
+        <div className="rounded-xl border border-border bg-bg-secondary p-6 text-center max-w-sm">
+          <Loader2 className="mx-auto mb-4 animate-spin text-accent" size={28} />
+          <p className="text-sm text-text-primary">Dang ket noi Microsoft...</p>
+        </div>
+      </div>
+    }>
+      <MicrosoftCallbackContent />
+    </Suspense>
   );
 }
