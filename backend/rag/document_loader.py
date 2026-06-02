@@ -25,8 +25,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from core.logger import logger
 
 # Chunk size có thể lớn hơn do đã có bộ chia cắt tốt hơn
-CHUNK_SIZE = 600       # ký tự per chunk
-CHUNK_OVERLAP = 100     # overlap để không mất context ở ranh giới
+CHUNK_SIZE = 1000       # ký tự per chunk
+CHUNK_OVERLAP = 200     # overlap để không mất context ở ranh giới
 MARKDOWN_CACHE_DIR = Path(__file__).parent.parent / "data" / "markdown_cache"
 
 _MARKER_UNAVAILABLE_REASON: Optional[str] = None

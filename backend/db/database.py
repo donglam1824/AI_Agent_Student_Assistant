@@ -66,6 +66,14 @@ def ensure_schema():
         "drive_mime_type": "TEXT",
     }
 
+    additions_chats = {
+        "source_scope": "TEXT",
+    }
+
+    additions_chat_messages = {
+        "source_scope": "TEXT",
+    }
+
     with engine.begin() as conn:
         # Migrate users table
         rows_users = conn.exec_driver_sql("PRAGMA table_info(users)").fetchall()
@@ -80,3 +88,15 @@ def ensure_schema():
         for column, column_type in additions_documents.items():
             if column not in existing_docs:
                 conn.exec_driver_sql(f"ALTER TABLE documents ADD COLUMN {column} {column_type}")
+
+        rows_chats = conn.exec_driver_sql("PRAGMA table_info(chats)").fetchall()
+        existing_chats = {row[1] for row in rows_chats}
+        for column, column_type in additions_chats.items():
+            if column not in existing_chats:
+                conn.exec_driver_sql(f"ALTER TABLE chats ADD COLUMN {column} {column_type}")
+
+        rows_messages = conn.exec_driver_sql("PRAGMA table_info(chat_messages)").fetchall()
+        existing_messages = {row[1] for row in rows_messages}
+        for column, column_type in additions_chat_messages.items():
+            if column not in existing_messages:
+                conn.exec_driver_sql(f"ALTER TABLE chat_messages ADD COLUMN {column} {column_type}")

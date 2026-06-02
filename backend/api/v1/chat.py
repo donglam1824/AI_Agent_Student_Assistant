@@ -11,7 +11,7 @@ Chat endpoint with Server-Sent Events (SSE) streaming.
 import json
 import re
 import unicodedata
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db import crud
-from db.models import User
+from db.models import Document, User
 from api.deps import get_current_user
 from core.logger import logger
 
@@ -32,6 +32,7 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 class ChatRequest(BaseModel):
     message: str
     chat_id: Optional[str] = None  # None = new chat
+    source_scope: Optional[Dict[str, Any]] = None
 
 
 class ChatSummary(BaseModel):
@@ -39,6 +40,7 @@ class ChatSummary(BaseModel):
     title: str
     created_at: str
     updated_at: str
+    source_scope: Optional[Dict[str, Any]] = None
 
 
 class MessageResponse(BaseModel):
@@ -46,6 +48,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     agent: Optional[str] = None
+    source_scope: Optional[Dict[str, Any]] = None
     created_at: str
 
 
@@ -61,6 +64,75 @@ def _normalize_text(text: str) -> str:
 
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _parse_source_scope(raw_scope: Optional[str | Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not raw_scope:
+        return None
+    if isinstance(raw_scope, dict):
+        return raw_scope
+    try:
+        parsed = json.loads(raw_scope)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _source_scope_to_json(source_scope: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not source_scope or source_scope.get("mode") == "all":
+        return None
+    return json.dumps(source_scope, ensure_ascii=False)
+
+
+def _normalize_source_scope(
+    db: Session,
+    user_id: str,
+    source_scope: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if not source_scope or source_scope.get("mode") == "all":
+        return None
+
+    mode = source_scope.get("mode")
+    if mode == "documents":
+        requested_ids = source_scope.get("document_ids") or []
+        document_ids = []
+        seen = set()
+        for doc_id in requested_ids:
+            if isinstance(doc_id, str) and doc_id and doc_id not in seen:
+                document_ids.append(doc_id)
+                seen.add(doc_id)
+        if not document_ids:
+            raise HTTPException(status_code=400, detail="Chua chon tai lieu nao.")
+
+        owned_docs = (
+            db.query(Document)
+            .filter(Document.user_id == user_id, Document.id.in_(document_ids))
+            .all()
+        )
+        owned_ids = {doc.id for doc in owned_docs}
+        if len(owned_ids) != len(document_ids):
+            raise HTTPException(status_code=403, detail="Co tai lieu khong thuoc quyen truy cap.")
+        return {"mode": "documents", "document_ids": document_ids}
+
+    if mode == "topic":
+        category = source_scope.get("category")
+        topic = source_scope.get("topic")
+        if not isinstance(category, str) or not category.strip():
+            raise HTTPException(status_code=400, detail="Chua chon topic hoac danh muc.")
+        query = db.query(Document).filter(
+            Document.user_id == user_id,
+            Document.status == "ready",
+            Document.category == category.strip(),
+        )
+        normalized: Dict[str, Any] = {"mode": "topic", "category": category.strip()}
+        if isinstance(topic, str) and topic.strip():
+            normalized["topic"] = topic.strip()
+            query = query.filter(Document.topic == topic.strip())
+        if not query.first():
+            raise HTTPException(status_code=400, detail="Nguon topic da chon chua co tai lieu san sang.")
+        return normalized
+
+    raise HTTPException(status_code=400, detail="Source scope khong hop le.")
 
 
 def _keyword_intent(text: str) -> Optional[str]:
@@ -155,6 +227,10 @@ def _classify_intent(text: str) -> str:
     return intent if intent != "unknown" else (_keyword_intent(text) or "unknown")
 
 
+def _user_has_ready_documents(db: Session, user_id: str) -> bool:
+    return any(doc.status == "ready" for doc in crud.get_user_documents(db, user_id))
+
+
 def _coerce_response_text(response) -> str:
     if isinstance(response, str):
         return response
@@ -195,7 +271,13 @@ def _get_agent(intent: str, user_id: str):
     return None
 
 
-async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session):
+async def _stream_chat(
+    user_input: str,
+    chat_id: str,
+    user_id: str,
+    db: Session,
+    source_scope: Optional[Dict[str, Any]] = None,
+):
     """
     Generator that yields SSE events:
       event: agent   → { "agent": "calendar" }
@@ -206,6 +288,10 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
     try:
         # Classify intent
         intent = _classify_intent(user_input)
+        if intent == "unknown" and source_scope:
+            intent = "docsearch"
+        if intent == "unknown" and _user_has_ready_documents(db, user_id):
+            intent = "docsearch"
 
         # Send agent event
         yield f"event: agent\ndata: {json.dumps({'agent': intent})}\n\n"
@@ -214,6 +300,8 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
         agent = _get_agent(intent, user_id=user_id)
         if agent is None:
             response_text = "Xin lỗi, mình chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn về Lịch học, Ghi chú, Email, Teams hoặc Tài liệu không?"
+        elif intent == "docsearch":
+            response_text = _coerce_response_text(agent.run(user_input, source_scope=source_scope))
         else:
             response_text = _coerce_response_text(agent.run(user_input))
 
@@ -224,8 +312,9 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
             yield f"event: token\ndata: {json.dumps({'content': chunk})}\n\n"
 
         # Save messages to DB
-        crud.add_message(db, chat_id, "user", user_input)
-        crud.add_message(db, chat_id, "assistant", response_text, agent=intent)
+        source_scope_json = _source_scope_to_json(source_scope)
+        crud.add_message(db, chat_id, "user", user_input, source_scope=source_scope_json)
+        crud.add_message(db, chat_id, "assistant", response_text, agent=intent, source_scope=source_scope_json)
 
         # Auto-generate chat title from first message
         chat = crud.get_chat_by_id(db, chat_id)
@@ -233,7 +322,7 @@ async def _stream_chat(user_input: str, chat_id: str, user_id: str, db: Session)
             chat.title = user_input[:50] + ("..." if len(user_input) > 50 else "")
             db.commit()
 
-        yield f"event: done\ndata: {json.dumps({'chat_id': chat_id})}\n\n"
+        yield f"event: done\ndata: {json.dumps({'chat_id': chat_id, 'source_scope': source_scope}, ensure_ascii=False)}\n\n"
 
     except Exception as e:
         logger.error(f"Chat stream error: {e}")
@@ -262,8 +351,14 @@ async def send_message(
         chat = crud.create_chat(db, current_user.id)
         chat_id = chat.id
 
+    if body.source_scope is not None:
+        source_scope = _normalize_source_scope(db, current_user.id, body.source_scope)
+        crud.update_chat_source_scope(db, chat_id, _source_scope_to_json(source_scope))
+    else:
+        source_scope = _parse_source_scope(chat.source_scope)
+
     return StreamingResponse(
-        _stream_chat(body.message, chat_id, current_user.id, db),
+        _stream_chat(body.message, chat_id, current_user.id, db, source_scope=source_scope),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -286,6 +381,7 @@ async def get_chat_history(
             title=c.title,
             created_at=c.created_at.isoformat(),
             updated_at=c.updated_at.isoformat(),
+            source_scope=_parse_source_scope(c.source_scope),
         )
         for c in chats
     ]
@@ -309,6 +405,7 @@ async def get_chat_messages(
             role=m.role,
             content=m.content,
             agent=m.agent,
+            source_scope=_parse_source_scope(m.source_scope),
             created_at=m.created_at.isoformat(),
         )
         for m in messages

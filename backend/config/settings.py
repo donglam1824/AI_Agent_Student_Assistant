@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     # gemini-2.0-flash: nhanh + miễn phí bậc cao; gemini-1.5-pro: chất lượng cao hơn
     gemini_model: str = "gemini-2.5-flash"
+    # Comma-separated Gemini fallback chain used when the primary model hits
+    # quota/rate-limit errors. Keep higher RPD models earlier in the list.
+    gemini_fallback_models: str = (
+        "gemini-3.1-flash-lite,"
+        "gemini-2.5-flash-lite,"
+        "gemini-3-flash,"
+        "gemini-3.5-flash"
+    )
+    llm_fallback_cooldown_seconds: int = 60
 
     # ── OpenAI ─────────────────────────────────────────────────────────────
     openai_api_key: str = ""

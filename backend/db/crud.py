@@ -143,6 +143,15 @@ def get_chat_by_id(db: Session, chat_id: str) -> Optional[Chat]:
     return db.query(Chat).filter(Chat.id == chat_id).first()
 
 
+def update_chat_source_scope(db: Session, chat_id: str, source_scope: str = None) -> Optional[Chat]:
+    chat = get_chat_by_id(db, chat_id)
+    if chat:
+        chat.source_scope = source_scope
+        db.commit()
+        db.refresh(chat)
+    return chat
+
+
 def delete_chat(db: Session, chat_id: str) -> bool:
     chat = get_chat_by_id(db, chat_id)
     if chat:
@@ -160,8 +169,15 @@ def add_message(
     role: str,
     content: str,
     agent: str = None,
+    source_scope: str = None,
 ) -> ChatMessage:
-    msg = ChatMessage(chat_id=chat_id, role=role, content=content, agent=agent)
+    msg = ChatMessage(
+        chat_id=chat_id,
+        role=role,
+        content=content,
+        agent=agent,
+        source_scope=source_scope,
+    )
     db.add(msg)
     # Update the chat's updated_at timestamp
     chat = get_chat_by_id(db, chat_id)

@@ -17,6 +17,16 @@ from core.logger import logger
 CHROMA_DIR = Path(__file__).parent.parent / "data" / "chroma_db"
 
 
+def _open_collection_without_embeddings() -> Chroma:
+    """Open the current Chroma collection without loading the embedding model."""
+    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+    collection_name = get_embedding_collection_name()
+    return Chroma(
+        collection_name=collection_name,
+        persist_directory=str(CHROMA_DIR),
+    )
+
+
 class VectorStore:
     """Quản lý ChromaDB collection cho tài liệu sinh viên."""
 
@@ -73,3 +83,12 @@ def get_vector_store() -> VectorStore:
     if _vector_store is None:
         _vector_store = VectorStore()
     return _vector_store
+
+
+def delete_vectors_by_metadata(where: Dict[str, Any]) -> None:
+    """Delete chunks without initializing local/API embedding providers."""
+    if not where:
+        return
+    db = _open_collection_without_embeddings()
+    db._collection.delete(where=where)
+    logger.info(f"VectorStore: deleted chunks where={where}")

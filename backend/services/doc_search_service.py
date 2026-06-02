@@ -10,7 +10,7 @@ Hỗ trợ 2 nguồn tài liệu:
 """
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 import hashlib
 import json
 import uuid
@@ -36,6 +36,68 @@ class DocSearchService:
     def __init__(self):
         self._loader = DocumentLoader()
         self._retriever = Retriever(k=5, score_threshold=0.3)
+
+    def _metadata_filter_for_scope(
+        self,
+        source_scope: Optional[Dict[str, Any]],
+        user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if not source_scope or source_scope.get("mode") == "all" or not user_id:
+            return None
+
+        mode = source_scope.get("mode")
+        if mode == "documents":
+            document_ids = source_scope.get("document_ids") or []
+            if not document_ids:
+                return None
+
+            db = SessionLocal()
+            try:
+                docs = (
+                    db.query(Document)
+                    .filter(Document.user_id == user_id, Document.id.in_(document_ids))
+                    .all()
+                )
+            finally:
+                db.close()
+
+            filters = []
+            for doc in docs:
+                if doc.source_type in {SOURCE_DRIVE, SOURCE_ONEDRIVE} and doc.drive_file_id:
+                    filters.append({
+                        "$and": [
+                            {"user_id": user_id},
+                            {"source_type": doc.source_type},
+                            {"drive_file_id": doc.drive_file_id},
+                        ]
+                    })
+                else:
+                    filters.append({
+                        "$and": [
+                            {"user_id": user_id},
+                            {"doc_id": doc.id},
+                        ]
+                    })
+
+            if not filters:
+                return {"$and": [{"user_id": user_id}, {"doc_id": "__no_matching_document__"}]}
+            if len(filters) == 1:
+                return filters[0]
+            return {"$or": filters}
+
+        if mode == "topic":
+            category = source_scope.get("category")
+            topic = source_scope.get("topic")
+            filters = [{"user_id": user_id}]
+            if category:
+                filters.append({"category": category})
+            if topic:
+                filters.append({"topic": topic})
+            if len(filters) == 1:
+                return None
+            return {"$and": filters}
+
+        return None
 
     # ── Compatibility methods (No-ops or empty since we migrated to SQLAlchemy) ──
     def _init_db(self):
@@ -689,9 +751,22 @@ class DocSearchService:
             logger.error(f"DocSearchService.sync_onedrive_document: {e}")
             return {"status": "error", "num_chunks": 0, "message": str(e)}
 
-    def search(self, query: str, document_name: Optional[str] = None, user_id: Optional[str] = None) -> str:
+    def search(
+        self,
+        query: str,
+        document_name: Optional[str] = None,
+        user_id: Optional[str] = None,
+        source_scope: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """Tìm kiếm tài liệu liên quan và trả về context."""
-        docs = self._retriever.retrieve(query, document_name=document_name, user_id=user_id)
+        metadata_filter = self._metadata_filter_for_scope(source_scope, user_id)
+        scoped_document_name = None if metadata_filter else document_name
+        docs = self._retriever.retrieve(
+            query,
+            document_name=scoped_document_name,
+            user_id=user_id,
+            metadata_filter=metadata_filter,
+        )
         return self._retriever.format_context(docs)
 
 

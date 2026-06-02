@@ -24,9 +24,16 @@ def search_documents(query: str, document_name: Optional[str] = None, config: Ru
                Ví dụ: "giai_tich_co_ban.txt"
     """
     service = get_doc_search_service()
-    user_id = (config or {}).get("configurable", {}).get("user_id")
+    configurable = (config or {}).get("configurable", {})
+    user_id = configurable.get("user_id")
+    source_scope = configurable.get("source_scope")
     try:
-        return service.search(query, document_name=document_name, user_id=user_id)
+        return service.search(
+            query,
+            document_name=document_name,
+            user_id=user_id,
+            source_scope=source_scope,
+        )
     except Exception as e:
         logger.error(f"search_documents error: {e}")
         return f"❌ Lỗi khi tìm kiếm: {e}"

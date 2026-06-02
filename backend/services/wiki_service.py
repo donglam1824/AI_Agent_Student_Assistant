@@ -147,7 +147,7 @@ class WikiService:
         wiki_path: str,
         summary: str,
     ) -> None:
-        """Prepend lightweight document context before embedding each chunk."""
+        """Store document context in metadata without changing embed text."""
         tags_text = ", ".join(tags) if tags else "không có"
         context = (
             f"Nguồn: {title}\n"
@@ -160,12 +160,12 @@ class WikiService:
         for chunk in chunks:
             if chunk.metadata.get("contextualized") is True:
                 continue
-            chunk.page_content = f"{context}\n\n--- Nội dung đoạn ---\n{chunk.page_content}"
             chunk.metadata.update(
                 {
                     "contextualized": True,
                     "context_summary": summary[:1000],
                     "wiki_path": wiki_path,
+                    "context_prefix": context,
                 }
             )
 

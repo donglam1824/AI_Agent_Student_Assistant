@@ -14,8 +14,18 @@ interface ChatMessageProps {
   message: ChatMessageType;
 }
 
+function formatSourceScope(message: ChatMessageType) {
+  const scope = message.source_scope;
+  if (!scope || scope.mode === "all") return null;
+  if (scope.mode === "documents") {
+    return `Nguồn: ${scope.document_ids.length} tài liệu`;
+  }
+  return `Nguồn: ${scope.topic ? `${scope.category} / ${scope.topic}` : scope.category}`;
+}
+
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const sourceLabel = formatSourceScope(message);
 
   return (
     <div
@@ -58,6 +68,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </div>
           )}
         </div>
+
+        {sourceLabel && (
+          <div
+            className={cn(
+              "mt-1 text-[10px] text-text-secondary",
+              isUser ? "text-right" : "text-left"
+            )}
+          >
+            {sourceLabel}
+          </div>
+        )}
 
         {/* Typing indicator (when AI message is empty and streaming) */}
         {!isUser && message.isStreaming && !message.content && (

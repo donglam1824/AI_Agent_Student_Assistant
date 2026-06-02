@@ -6,12 +6,13 @@
 "use client";
 
 import { useState, useRef, useCallback, KeyboardEvent } from "react";
-import { Send, Paperclip } from "lucide-react";
+import { BookOpen, Send, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   onFileUpload?: (file: File) => void;
+  onOpenSourcePicker?: () => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -19,6 +20,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   onFileUpload,
+  onOpenSourcePicker,
   disabled = false,
   placeholder = "Nhập tin nhắn...",
 }: ChatInputProps) {
@@ -66,24 +68,26 @@ export function ChatInput({
   return (
     <div
       className={cn(
-        "flex items-end gap-2 p-3",
+        "flex items-end gap-2 px-4 py-3",
         "border-t border-border bg-bg-primary"
       )}
     >
-      {/* File upload button */}
+      {/* Upload button */}
       {onFileUpload && (
         <>
           <button
             id="chat-upload-btn"
             onClick={handleFileClick}
+            disabled={disabled}
             className={cn(
-              "p-2.5 rounded-xl flex-shrink-0",
+              "h-12 w-12 rounded-xl flex-shrink-0 inline-flex items-center justify-center",
               "text-text-secondary hover:text-text-primary hover:bg-bg-elevated",
-              "transition-colors duration-150"
+              "transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             )}
-            aria-label="Đính kèm file"
+            aria-label="Tải lên tài liệu"
+            title="Tải lên tài liệu"
           >
-            <Paperclip size={18} />
+            <Upload size={18} />
           </button>
           <input
             ref={fileInputRef}
@@ -95,8 +99,25 @@ export function ChatInput({
         </>
       )}
 
+      {onOpenSourcePicker && (
+        <button
+          id="chat-source-btn"
+          onClick={onOpenSourcePicker}
+          disabled={disabled}
+          className={cn(
+            "h-12 w-12 rounded-xl flex-shrink-0 inline-flex items-center justify-center",
+            "text-text-secondary hover:text-text-primary hover:bg-bg-elevated",
+            "transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
+          aria-label="Sử dụng tài liệu"
+          title="Sử dụng tài liệu"
+        >
+          <BookOpen size={18} />
+        </button>
+      )}
+
       {/* Textarea */}
-      <div className="flex-1 relative">
+      <div className="flex-1 min-w-0 relative">
         <textarea
           ref={textareaRef}
           id="chat-input"
@@ -107,7 +128,7 @@ export function ChatInput({
           placeholder={placeholder}
           rows={1}
           className={cn(
-            "w-full resize-none px-4 py-2.5 rounded-xl",
+            "block min-h-12 w-full resize-none overflow-hidden px-4 py-3 rounded-xl leading-5",
             "bg-bg-secondary border border-border",
             "text-sm text-text-primary placeholder:text-text-secondary",
             "focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30",
@@ -123,7 +144,7 @@ export function ChatInput({
         onClick={handleSend}
         disabled={!text.trim() || disabled}
         className={cn(
-          "p-2.5 rounded-xl flex-shrink-0",
+          "h-12 w-12 rounded-xl flex-shrink-0 inline-flex items-center justify-center",
           "transition-all duration-150",
           text.trim() && !disabled
             ? "bg-accent text-text-on-accent hover:bg-accent-hover shadow-sm"

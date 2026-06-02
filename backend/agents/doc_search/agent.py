@@ -66,20 +66,34 @@ class DocSearchAgent:
         builder.add_edge("tools", "reason")
         return builder.compile()
 
-    def run(self, user_message: str) -> str:
+    def run(self, user_message: str, source_scope: dict | None = None) -> str:
         from datetime import datetime, timezone
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        scoped_prompt = ""
+        if source_scope and source_scope.get("mode") != "all":
+            scoped_prompt = (
+                "\nNguon tri thuc cua cuoc tro chuyen dang duoc gioi han. "
+                "Khi tim tai lieu, bat buoc dung search_documents va chi dua vao "
+                "source_scope duoc he thong gan trong config. Khong tu mo rong sang "
+                "tai lieu khac. Neu khong tim thay, hay noi ro la khong tim thay "
+                "trong nguon da chon.\n"
+            )
 
         initial_state: DocSearchAgentState = {
             "messages": [
-                SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time)),
+                SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time) + scoped_prompt),
                 HumanMessage(content=user_message),
             ],
             "user_request": user_message,
             "action_result": "",
         }
 
-        config = {"configurable": {"user_id": self._user_id}} if self._user_id else None
+        configurable = {}
+        if self._user_id:
+            configurable["user_id"] = self._user_id
+        if source_scope:
+            configurable["source_scope"] = source_scope
+        config = {"configurable": configurable} if configurable else None
         logger.info(f"DocSearchAgent.run - user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
         return final_state["messages"][-1].content

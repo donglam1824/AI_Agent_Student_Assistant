@@ -5,17 +5,17 @@
 
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { sendChatMessage } from "@/lib/api";
 import { tempId } from "@/lib/utils";
-import type { ChatMessage, AgentType } from "@/types";
+import type { ChatMessage, AgentType, ChatSourceScope } from "@/types";
 
 interface UseChatReturn {
   messages: ChatMessage[];
   isLoading: boolean;
   currentAgent: AgentType | null;
   error: string | null;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, sourceScope?: ChatSourceScope | null) => Promise<void>;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   clearMessages: () => void;
 }
@@ -26,10 +26,13 @@ export function useChat(chatId: string | null): UseChatReturn {
   const [currentAgent, setCurrentAgent] = useState<AgentType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const chatIdRef = useRef(chatId);
-  chatIdRef.current = chatId;
+
+  useEffect(() => {
+    chatIdRef.current = chatId;
+  }, [chatId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, sourceScope?: ChatSourceScope | null) => {
       if (!text.trim() || isLoading) return;
 
       setError(null);
@@ -41,6 +44,7 @@ export function useChat(chatId: string | null): UseChatReturn {
         id: tempId(),
         role: "user",
         content: text,
+        source_scope: sourceScope?.mode === "all" ? null : sourceScope,
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, userMsg]);
@@ -51,13 +55,14 @@ export function useChat(chatId: string | null): UseChatReturn {
         id: aiMsgId,
         role: "assistant",
         content: "",
+        source_scope: sourceScope?.mode === "all" ? null : sourceScope,
         created_at: new Date().toISOString(),
         isStreaming: true,
       };
       setMessages((prev) => [...prev, aiMsg]);
 
       try {
-        const response = await sendChatMessage(text, chatIdRef.current);
+        const response = await sendChatMessage(text, chatIdRef.current, sourceScope);
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);

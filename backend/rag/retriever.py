@@ -4,7 +4,7 @@ rag/retriever.py
 High-level retriever: tìm kiếm + format context để đưa vào LLM.
 Áp dụng score threshold để loại bỏ các kết quả không liên quan.
 """
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from langchain_core.documents import Document
 from rag.vector_store import get_vector_store
 from core.logger import logger
@@ -22,6 +22,7 @@ class Retriever:
         query: str,
         document_name: Optional[str] = None,
         user_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """Trả về top-k chunks liên quan nhất, lọc theo score threshold và metadata (tùy chọn)."""
         store = get_vector_store()
@@ -31,6 +32,8 @@ class Retriever:
 
         # Xây dựng filter theo document_name nếu có
         filters = []
+        if metadata_filter:
+            filters.append(metadata_filter)
         if document_name:
             filters.append({"source": document_name})
         if user_id:
@@ -67,6 +70,10 @@ class Retriever:
             source = doc.metadata.get("source", "Không rõ nguồn")
             page = doc.metadata.get("page", "")
             page_info = f" (trang {page})" if page else ""
-            parts.append(f"[{i}] Từ: {source}{page_info}\n{doc.page_content}")
+            content = doc.page_content
+            context_prefix = doc.metadata.get("context_prefix", "")
+            if context_prefix:
+                content = f"{context_prefix}\n\n--- Nội dung đoạn ---\n{content}"
+            parts.append(f"[{i}] Từ: {source}{page_info}\n{content}")
         
         return "\n\n---\n\n".join(parts)

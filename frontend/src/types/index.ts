@@ -22,11 +22,17 @@ export interface ConnectionStatus {
 
 export type AgentType = "calendar" | "note" | "email" | "docsearch" | "teams" | "unknown";
 
+export type ChatSourceScope =
+  | { mode: "all" }
+  | { mode: "documents"; document_ids: string[] }
+  | { mode: "topic"; category: string; topic?: string };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   agent?: AgentType | null;
+  source_scope?: ChatSourceScope | null;
   created_at: string;
   isStreaming?: boolean;
 }
@@ -36,6 +42,7 @@ export interface ChatSummary {
   title: string;
   created_at: string;
   updated_at: string;
+  source_scope?: ChatSourceScope | null;
 }
 
 // ── Documents ─────────────────────────────────────────────────────────────

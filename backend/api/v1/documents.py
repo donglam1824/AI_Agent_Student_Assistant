@@ -430,7 +430,7 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Tai lieu khong ton tai.")
 
     try:
-        from rag.vector_store import get_vector_store
+        from rag.vector_store import delete_vectors_by_metadata
 
         if doc_to_delete.source_type in {"google_drive", "onedrive"} and doc_to_delete.drive_file_id:
             vector_filter = {
@@ -442,7 +442,7 @@ async def delete_document(
             }
         else:
             vector_filter = {"doc_id": doc_id}
-        get_vector_store().delete_by_metadata(vector_filter)
+        delete_vectors_by_metadata(vector_filter)
     except Exception as e:
         logger.error(f"Delete document vectors error: {e}")
         raise HTTPException(status_code=500, detail=f"Khong the xoa vector cua tai lieu: {str(e)}")

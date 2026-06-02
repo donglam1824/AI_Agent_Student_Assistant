@@ -54,6 +54,7 @@ class Chat(Base):
     id = Column(String, primary_key=True, default=_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String, default="Cuộc trò chuyện mới")
+    source_scope = Column(Text, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -70,6 +71,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # "user" | "assistant"
     content = Column(Text, nullable=False)
     agent = Column(String, nullable=True)  # "calendar" | "note" | "email" | "docsearch" | null
+    source_scope = Column(Text, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     # Relationships
