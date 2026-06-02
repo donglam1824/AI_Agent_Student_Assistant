@@ -44,7 +44,8 @@ def analyze_and_store_emails(user_id: str, emails: List[Dict[str, Any]], scan_se
             # 2. Tóm tắt nội dung
             prompt = f"Tóm tắt email sau trong 1-2 câu ngắn gọn:\nChủ đề: {subject}\nNgười gửi: {sender}\nNội dung: {snippet}"
             summary_response = llm.invoke(prompt)
-            summary_text = summary_response.content if hasattr(summary_response, 'content') else str(summary_response)
+            from core.llm_manager import coerce_message_content
+            summary_text = coerce_message_content(summary_response.content) if hasattr(summary_response, 'content') else str(summary_response)
             
             # 3. Trích xuất deadline
             deadline_result_str = extract_deadline.invoke({"text": body})

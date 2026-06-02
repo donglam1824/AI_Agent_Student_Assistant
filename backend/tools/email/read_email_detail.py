@@ -261,6 +261,7 @@ def _summarize_email(llm_manager, subject: str, sender: str, content: str) -> st
         return "Nội dung email quá ngắn hoặc trống."
 
     try:
+        from core.llm_manager import coerce_message_content
         llm = llm_manager.get_model(task="email_summary")
         # Giới hạn content gửi tới LLM để tránh quá dài
         truncated = content[:2000] if len(content) > 2000 else content
@@ -275,7 +276,7 @@ def _summarize_email(llm_manager, subject: str, sender: str, content: str) -> st
         )
 
         response = llm.invoke(prompt)
-        return response.content if hasattr(response, "content") else str(response)
+        return coerce_message_content(response.content) if hasattr(response, "content") else str(response)
     except Exception as e:
         logger.warning(f"Error summarizing email: {e}")
         return content[:200] + "..." if len(content) > 200 else content

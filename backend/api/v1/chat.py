@@ -208,22 +208,24 @@ def _classify_intent(text: str) -> str:
     if keyword_intent:
         return keyword_intent
 
-    from core.llm_manager import llm_manager
+    from core.llm_manager import llm_manager, coerce_message_content
     llm = llm_manager.get("default")
     prompt = (
-        "Bạn là một bộ định tuyến cực kỳ chính xác.\n"
-        "Hãy phân tích câu sau của người dùng và xếp nó vào 1 trong 5 nhóm chức năng:\n"
-        "1. 'calendar': Các câu hỏi liên quan đến lịch trình, thời gian biểu, hẹn hò, cuộc họp, sự kiện, dời lịch...\n"
-        "2. 'note': Tạo, lưu, xem, liệt kê hoặc quản lý ghi chú cá nhân.\n"
-        "3. 'email': Các câu hỏi yêu cầu soạn thư, gửi email, kiểm tra hòm thư, xử lý thư phản hồi...\n"
-        "4. 'docsearch': Tìm kiếm tài liệu, tóm tắt chương/bài học, hỏi đáp kiến thức từ tệp tải lên hoặc quản lý tài liệu (PDF, TXT, DOCX)...\n"
-        "5. 'teams': Các câu hỏi về Microsoft Teams, lớp Teams, kênh, thông báo, tin nhắn lớp, bài tập trên Teams...\n"
-        "Nếu không liên quan hoặc không thể xác định, hãy trả về 'unknown'.\n\n"
-        f"Câu hỏi: \"{text}\"\n"
-        "CHỈ trả về ĐÚNG 1 TỪ DUY NHẤT (lowercase) thuộc: [calendar, note, email, docsearch, teams, unknown]."
+        "Bạn là bộ định tuyến cực kỳ chính xác cho trợ lý sinh viên đại học.\n"
+        "Phân loại câu hỏi của sinh viên vào ĐÚNG 1 nhóm:\n\n"
+        "1. 'calendar': Xem/tạo/sửa/xóa lịch, thời khóa biểu, cuộc họp, sự kiện, deadline.\n"
+        "2. 'note': Tạo, lưu, xem, liệt kê, quản lý ghi chú cá nhân.\n"
+        "3. 'email': Soạn thư, gửi email, kiểm tra hòm thư, xử lý thư phản hồi.\n"
+        "4. 'docsearch': Hỏi kiến thức, tóm tắt bài học, tìm kiếm nội dung tài liệu, "
+        "hỏi đáp về chương/môn/slide, hoặc quản lý tài liệu (upload, liệt kê file). "
+        "Câu hỏi học thuật chung (ví dụ: 'đạo hàm là gì', 'giải thích OOP') cũng thuộc nhóm này.\n"
+        "5. 'teams': Microsoft Teams – lớp học, kênh, tin nhắn, bài tập trên Teams.\n\n"
+        "Nếu câu hỏi mang tính trò chuyện xã giao hoặc hoàn toàn không liên quan, trả về 'unknown'.\n\n"
+        f"Câu hỏi: \"{text}\"\n\n"
+        "CHỈ trả về ĐÚNG 1 TỪ (lowercase): calendar | note | email | docsearch | teams | unknown"
     )
     response = llm.invoke(prompt)
-    intent = _parse_llm_intent(response.content)
+    intent = _parse_llm_intent(coerce_message_content(response.content))
     return intent if intent != "unknown" else (_keyword_intent(text) or "unknown")
 
 

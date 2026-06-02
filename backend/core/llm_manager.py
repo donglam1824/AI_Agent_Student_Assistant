@@ -79,6 +79,27 @@ def _extract_retry_delay_seconds(exc: Exception) -> float | None:
     return None
 
 
+def coerce_message_content(content: Any) -> str:
+    """Coerce LangChain message content (which could be string or list) to plain string."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(
+                    item.get("text")
+                    or item.get("content")
+                    or str(item)
+                )
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part)
+    return str(content) if content is not None else ""
+
+
 class FallbackChatModel:
     """Small proxy that tries the next LLM model on quota/rate-limit errors."""
 

@@ -90,7 +90,7 @@ def classify_intent(text: str) -> str:
     Sử dụng LLM mặc định để phân tích câu hỏi người dùng và trả về 1 trong 4 nhãn:
     'calendar', 'note', 'email', 'unknown'
     """
-    from core.llm_manager import llm_manager
+    from core.llm_manager import llm_manager, coerce_message_content
     llm = llm_manager.get("default")
     prompt = (
         "Bạn là một bộ định tuyến cực kỳ chính xác.\n"
@@ -105,7 +105,7 @@ def classify_intent(text: str) -> str:
     )
     
     response = llm.invoke(prompt)
-    intent = response.content.strip().lower()
+    intent = coerce_message_content(response.content).strip().lower()
     
     # Validation
     if "calendar" in intent:
