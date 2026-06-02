@@ -59,6 +59,7 @@ def ensure_schema():
         "topic": "TEXT",
         "category": "TEXT",
         "tags": "TEXT",
+        "content_hash": "TEXT",
         "source_type": "TEXT DEFAULT 'manual_upload'",
         "drive_file_id": "TEXT",
         "drive_modified_time": "TEXT",

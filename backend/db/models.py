@@ -84,6 +84,7 @@ class Document(Base):
     filename = Column(String, nullable=False)
     file_type = Column(String, nullable=False)  # "pdf" | "docx" | "txt"
     file_size = Column(Integer, nullable=False)  # bytes
+    content_hash = Column(String, nullable=True, index=True)  # sha256 of uploaded/downloaded content
     chunk_count = Column(Integer, default=0)
     status = Column(String, default="processing")  # "processing" | "ready" | "error"
     error_message = Column(Text, nullable=True)

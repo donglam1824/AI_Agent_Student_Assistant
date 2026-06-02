@@ -1,4 +1,4 @@
-# BÁO CÁO TIẾN ĐỘ THỰC HIỆN ĐỀ TÀI (Cập nhật: 16/05/2026)
+# BÁO CÁO TIẾN ĐỘ THỰC HIỆN ĐỀ TÀI (Cập nhật: 01/06/2026)
 
 ## Mô tả đề tài
 **Tên đề tài:** Hệ thống Multi-Agent AI hỗ trợ quản lý tri thức và trợ lý học tập cá nhân cho sinh viên
@@ -112,16 +112,64 @@ Trong giai đoạn này, hệ thống đã được **mở rộng toàn diện t
 - **Router mở rộng:** Bộ định tuyến ý định (Intent Router) đã được mở rộng từ 3 loại (Calendar, Note, Email) lên 5 loại: `calendar`, `note`, `email`, `docsearch`, `unknown`. Hỗ trợ phân loại câu hỏi liên quan đến tìm kiếm tài liệu, hỏi đáp kiến thức.
 - **Lazy-loading agents:** Các agent nặng (Email, DocSearch) được khởi tạo theo kiểu lazy-load để tối ưu thời gian khởi động.
 
-## Kế hoạch thực hiện 1–2 tuần tới
+## Kết quả đã đạt được (Từ 16/05/2026 đến 01/06/2026)
+
+Trong giai đoạn này, hệ thống tiếp tục được **hoàn thiện theo hướng ổn định hóa trải nghiệm sử dụng thực tế**, đặc biệt ở các phần phân loại tài liệu, quản lý tri thức RAG, định tuyến hội thoại và xử lý email học thuật:
+
+### 1. Hoàn thiện phân loại tài liệu học tập và giao diện tổng quan chủ đề
+
+- **Topic Classifier:** Xây dựng dịch vụ `TopicClassifier` sử dụng LLM để tự động phân tích nội dung tài liệu, xác định `topic`, `category`, `tags` và độ tin cậy khi upload/import tài liệu.
+- **Metadata tài liệu mở rộng:** Bổ sung lưu trữ `topic`, `category`, `tags` vào database và metadata chunk trong vector store, giúp tài liệu không chỉ được tìm kiếm theo nội dung mà còn được tổ chức theo chủ đề học tập.
+- **API quản lý chủ đề:** Bổ sung endpoint `/documents/topics` để tổng hợp số lượng tài liệu theo danh mục và endpoint cập nhật thủ công topic/category/tags cho từng tài liệu.
+- **Frontend Topic Overview:** Xây dựng component `TopicOverview` hiển thị tổng quan phân loại học tập bằng biểu đồ donut, category cards và bộ lọc theo danh mục. Danh sách tài liệu hỗ trợ hiển thị badge chủ đề/danh mục và chỉnh sửa metadata trực tiếp.
+
+### 2. Hoàn thiện tích hợp OneDrive và đồng bộ tài liệu đa nguồn
+
+- **OneDrive Service:** Hoàn thiện dịch vụ đọc file OneDrive thông qua Microsoft Graph API, hỗ trợ liệt kê thư mục, liệt kê file và tải nội dung file về hệ thống RAG.
+- **API OneDrive:** Bổ sung các endpoint `/documents/onedrive/folders`, `/documents/onedrive/files`, `/documents/onedrive/import` và `/documents/onedrive/sync/{file_id}` để thao tác tài liệu OneDrive tương tự Google Drive.
+- **Frontend Docs mở rộng:** Trang quản lý tài liệu có thêm tab OneDrive, tái sử dụng `DriveBrowser` để người dùng có thể duyệt, chọn và import tài liệu từ Microsoft 365.
+- **Cơ chế re-sync:** Cả Google Drive và OneDrive đều hỗ trợ kiểm tra `modifiedTime`/metadata để tránh xử lý lại tài liệu khi file chưa thay đổi.
+
+### 3. Nâng cấp chất lượng RAG bằng Markdown hóa PDF và Knowledge Wiki
+
+- **PDF to Markdown bằng marker-pdf:** Nâng cấp `DocumentLoader` để ưu tiên chuyển PDF sang Markdown bằng `marker-pdf`, giữ tốt hơn cấu trúc tiêu đề, đoạn, bảng biểu và ngữ cảnh học tập. Khi môi trường không hỗ trợ marker, hệ thống tự fallback về `pypdf`.
+- **Markdown cache:** Bổ sung cache Markdown theo user và hash nội dung file tại `data/markdown_cache/`, giúp tránh chuyển đổi lại PDF nhiều lần và cải thiện tốc độ xử lý tài liệu.
+- **Markdown Knowledge Wiki:** Xây dựng `WikiService` tạo cơ sở tri thức dạng Markdown theo từng user tại `data/wiki/`, gồm `manifest.json`, `index.md`, file tóm tắt theo danh mục và file Markdown riêng cho từng tài liệu.
+- **Contextualized chunks:** Trước khi đưa chunk vào vector store, hệ thống bổ sung ngữ cảnh gồm tên tài liệu, danh mục, chủ đề, tags và tóm tắt tài liệu. Việc này giúp kết quả truy xuất RAG có thêm ngữ cảnh và giảm rủi ro trả lời rời rạc khi chunk quá ngắn.
+- **Đồng bộ khi xóa tài liệu:** Khi người dùng xóa tài liệu, hệ thống xóa cả vector tương ứng và bản ghi trong Markdown wiki để tránh dữ liệu cũ còn tồn tại trong kho tri thức.
+
+### 4. Nâng cấp Email Agent theo hướng "Smart Academic Email"
+
+- **Bộ lọc email học thuật dùng chung:** Xây dựng `academic_filter.py` với cơ chế phân loại nhiều tầng: domain trường đại học, subdomain LMS/học vụ, keyword trong sender và keyword trong subject/body.
+- **Lọc email học thuật mặc định:** Tool `list_emails` mặc định chỉ trả về email học thuật (`academic_only=True`), đồng thời vẫn hỗ trợ xem tất cả email khi người dùng yêu cầu.
+- **Tool quét và tóm tắt email:** Bổ sung `scan_and_summarize_emails` để quét Gmail/Outlook, lọc email học thuật, phân nhóm theo mức độ ưu tiên (`urgent`, `important`, `follow_up`, `info`) và trình bày kết quả có cấu trúc.
+- **Tool đọc chi tiết email:** Bổ sung `read_email_detail` để lấy nội dung đầy đủ một email cụ thể, tóm tắt bằng LLM, trích xuất deadline và gợi ý hành động như tạo nhắc lịch hoặc soạn phản hồi.
+- **Email Agent prompt mới:** Cập nhật prompt hệ thống để ưu tiên luồng quét email học thuật, không hiển thị danh sách email thô, chủ động đề xuất tạo reminder khi phát hiện deadline và đề xuất soạn phản hồi khi email cần trả lời.
+- **Scheduler dùng bộ lọc chung:** `EmailScheduler` được điều chỉnh để dùng cùng module `academic_filter`, giúp logic lọc email học thuật thống nhất giữa quét định kỳ và chat.
+
+### 5. Cải thiện Intent Router và trải nghiệm chat
+
+- **Nhận diện ý định bằng keyword:** Bổ sung lớp nhận diện nhanh dựa trên keyword trước khi gọi LLM, giúp các yêu cầu phổ biến về lịch, ghi chú, email, tài liệu và Teams được định tuyến nhanh hơn.
+- **Chuẩn hóa tiếng Việt không dấu:** Router hỗ trợ normalize nội dung người dùng để nhận diện cả câu có dấu và không dấu, giảm lỗi khi sinh viên nhập nhanh.
+- **Hỗ trợ Teams trong router:** Intent Router mở rộng thêm `teams`, đồng bộ với Teams Agent đã xây dựng trước đó.
+- **Parse kết quả LLM an toàn hơn:** Bổ sung cơ chế chuẩn hóa output từ LLM để chỉ nhận một trong các intent hợp lệ, hạn chế lỗi khi mô hình trả lời dài hoặc sai định dạng.
+
+### 6. Dọn dẹp dữ liệu phát sinh và ổn định mã nguồn
+
+- **Loại bỏ binary phát sinh khỏi repository:** Dọn các file database/cache như ChromaDB binary và SQLite WAL/SHM khỏi Git để giảm rủi ro commit nhầm dữ liệu runtime.
+- **Cập nhật dependency xử lý tài liệu:** Bổ sung `marker-pdf` và cấu hình liên quan để phục vụ pipeline chuyển đổi PDF sang Markdown.
+- **Cải thiện giao diện phụ trợ:** Tinh chỉnh giao diện email panel, badge agent và các thông báo OAuth Microsoft bằng tiếng Việt để trải nghiệm đồng nhất hơn.
+
+## Kế hoạch thực hiện 1–2 tuần tới (Sau 01/06/2026)
 
 **Tuần tiếp theo: Kiểm thử tích hợp và Tối ưu hóa**
-- Kiểm thử tương tác chéo giữa các agents (ví dụ: Email Agent nhận deadline qua email → Calendar Agent tạo sự kiện lịch tương ứng).
-- Tối ưu prompt engineering cho các agent để cải thiện chất lượng phản hồi.
-- Triển khai hệ thống nhắc nhở deadline chủ động (Email Agent phát hiện deadline → gửi thông báo cho sinh viên).
-- Kiểm tra và cải thiện tốc độ truy vấn RAG khi lượng tài liệu lớn.
+- Kiểm thử end-to-end các luồng chính: đăng nhập Google, kết nối Microsoft, chat với từng agent, upload/import tài liệu, tìm kiếm RAG, quét email học thuật và đọc chi tiết email.
+- Kiểm thử tương tác chéo giữa các agents, đặc biệt luồng Email Agent phát hiện deadline → Calendar Agent tạo sự kiện/nhắc lịch tương ứng.
+- Đo hiệu năng pipeline RAG với tài liệu lớn, kiểm tra thời gian chuyển PDF sang Markdown, tốc độ embedding và tốc độ truy vấn ChromaDB.
+- Rà soát lỗi biên của bộ lọc email học thuật, bổ sung domain/keyword phổ biến và giảm false positive/false negative.
 
 **Tuần sau: Hoàn thiện giao diện và Viết báo cáo**
-- Hoàn thiện UI/UX các trang Dashboard, bổ sung responsive design cho mobile.
-- Viết tài liệu kỹ thuật mô tả kiến trúc hệ thống, luồng hoạt động Multi-Agent.
-- Chuẩn bị slide thuyết trình và demo sản phẩm.
-- Hoàn chỉnh báo cáo đồ án tốt nghiệp.
+- Hoàn thiện UI/UX cho Dashboard, Docs, Email và Settings; kiểm tra responsive design trên mobile/tablet.
+- Viết tài liệu kỹ thuật mô tả kiến trúc Multi-Agent, luồng xác thực OAuth, pipeline RAG, Knowledge Wiki và luồng xử lý email học thuật.
+- Chuẩn bị dữ liệu demo gồm tài liệu mẫu, email mẫu, lịch học/deadline và kịch bản trình diễn các agent phối hợp.
+- Hoàn chỉnh báo cáo đồ án tốt nghiệp, slide thuyết trình và checklist triển khai/demo.

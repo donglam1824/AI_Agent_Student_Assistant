@@ -11,6 +11,7 @@ Hỗ trợ 2 nguồn tài liệu:
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
+import hashlib
 import json
 import uuid
 
@@ -20,6 +21,7 @@ from rag.retriever import Retriever
 from core.logger import logger
 from db.database import SessionLocal
 from db.models import Document
+from db import crud
 from services.topic_classifier import TopicClassifier
 
 # Source type constants
@@ -55,6 +57,7 @@ class DocSearchService:
         drive_mime_type: Optional[str] = None,
         user_id: Optional[str] = None,
         file_size: int = 0,
+        content_hash: Optional[str] = None,
         topic: Optional[str] = None,
         category: Optional[str] = None,
         tags: Optional[str] = None,
@@ -77,11 +80,14 @@ class DocSearchService:
                     filename=file_name,
                     file_type=file_name.split(".")[-1] if "." in file_name else "txt",
                     file_size=file_size,
+                    content_hash=content_hash,
                     created_at=datetime.utcnow()
                 )
                 db.add(doc)
             
             doc.chunk_count = num_chunks
+            if content_hash:
+                doc.content_hash = content_hash
             doc.status = "ready"
             doc.source_type = source_type
             doc.drive_file_id = drive_file_id
@@ -127,6 +133,62 @@ class DocSearchService:
             db.rollback()
         finally:
             db.close()
+
+    @staticmethod
+    def _hash_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _hash_bytes(content: bytes) -> str:
+        return hashlib.sha256(content).hexdigest()
+
+    def _update_wiki_for_chunks(
+        self,
+        *,
+        user_id: Optional[str],
+        document_key: str,
+        file_name: str,
+        chunks: list,
+        topic: str,
+        category: str,
+        tags: List[str],
+        source_type: str,
+        source_id: Optional[str] = None,
+    ) -> None:
+        """Update Markdown wiki and add contextual retrieval text to chunks."""
+        if not user_id:
+            return
+
+        try:
+            from services.wiki_service import get_wiki_service
+
+            wiki_service = get_wiki_service()
+            wiki_result = wiki_service.upsert_document(
+                user_id=user_id,
+                document_key=document_key,
+                title=file_name,
+                chunks=chunks,
+                topic=topic,
+                category=category,
+                tags=tags,
+                source_type=source_type,
+                source_id=source_id,
+            )
+            wiki_service.contextualize_chunks(
+                chunks=chunks,
+                title=file_name,
+                topic=topic,
+                category=category,
+                tags=tags,
+                wiki_path=wiki_result.relative_document_path,
+                summary=wiki_result.summary,
+            )
+        except Exception as e:
+            logger.error(f"DocSearchService wiki update error for {document_key}: {e}")
 
     def list_documents(self, user_id: Optional[str] = None) -> List[Dict]:
         """Trả về danh sách tài liệu đã upload (cả manual và Drive/OneDrive)."""
@@ -188,8 +250,37 @@ class DocSearchService:
         """Load file → embed → lưu vào ChromaDB + SQLite."""
         path = Path(file_path)
         logger.info(f"DocSearchService.upload: {path.name}")
+        content_hash = self._hash_file(path)
 
-        chunks = self._loader.load(file_path)
+        db = SessionLocal()
+        try:
+            existing_doc = (
+                crud.get_user_document_by_hash(
+                    db,
+                    user_id,
+                    content_hash,
+                    statuses=["processing", "ready"],
+                )
+                if user_id
+                else None
+            )
+        finally:
+            db.close()
+        if existing_doc:
+            return (
+                f"Tai lieu '{path.name}' da duoc nap truoc do "
+                f"({existing_doc.filename}), bo qua xu ly lai de tranh ton quota."
+            )
+
+        load_metadata = {
+            "source": path.name,
+            "source_type": SOURCE_MANUAL,
+            "content_hash": content_hash,
+        }
+        if user_id:
+            load_metadata["user_id"] = user_id
+
+        chunks = self._loader.load(file_path, metadata=load_metadata)
         if not chunks:
             return f"Không thể đọc nội dung từ file {path.name}."
 
@@ -212,10 +303,23 @@ class DocSearchService:
                 "topic": topic,
                 "category": category,
                 "tags": tags_str,
+                "content_hash": content_hash,
             }
             if user_id:
                 chunk_metadata["user_id"] = user_id
             chunk.metadata.update(chunk_metadata)
+
+        self._update_wiki_for_chunks(
+            user_id=user_id,
+            document_key=f"{SOURCE_MANUAL}:{user_id or 'anonymous'}:{path.name}",
+            file_name=path.name,
+            chunks=chunks,
+            topic=topic,
+            category=category,
+            tags=tags_list,
+            source_type=SOURCE_MANUAL,
+            source_id=str(path),
+        )
 
         store = get_vector_store()
         num_added = store.add_documents(chunks)
@@ -227,6 +331,7 @@ class DocSearchService:
             source_type=SOURCE_MANUAL,
             user_id=user_id,
             file_size=path.stat().st_size if path.exists() else 0,
+            content_hash=content_hash,
             topic=topic,
             category=category,
             tags=tags_str,
@@ -281,6 +386,7 @@ class DocSearchService:
                     modified_time=modified_time,
                 )
                 ext, content_bytes = drive_svc.get_file_content(drive_file)
+                content_hash = self._hash_bytes(content_bytes)
 
                 # Cập nhật size nếu export Google Docs
                 if not file_size and content_bytes:
@@ -293,6 +399,7 @@ class DocSearchService:
                     "drive_file_id": file_id,
                     "drive_modified_time": modified_time,
                     "drive_mime_type": mime_type,
+                    "content_hash": content_hash,
                 }
                 if user_id:
                     temp_metadata["user_id"] = user_id
@@ -326,6 +433,18 @@ class DocSearchService:
                     })
 
                 # Xóa chunks cũ nếu đã import trước đó (re-import)
+                self._update_wiki_for_chunks(
+                    user_id=user_id,
+                    document_key=f"{SOURCE_DRIVE}:{file_id}",
+                    file_name=file_name,
+                    chunks=chunks,
+                    topic=topic,
+                    category=category,
+                    tags=tags_list,
+                    source_type=SOURCE_DRIVE,
+                    source_id=file_id,
+                )
+
                 delete_filter = {"$and": [{"drive_file_id": file_id}, {"source_type": SOURCE_DRIVE}]}
                 if user_id:
                     delete_filter = {"$and": [{"drive_file_id": file_id}, {"source_type": SOURCE_DRIVE}, {"user_id": user_id}]}
@@ -347,6 +466,7 @@ class DocSearchService:
                     drive_mime_type=mime_type,
                     user_id=user_id,
                     file_size=file_size,
+                    content_hash=content_hash,
                     topic=topic,
                     category=category,
                     tags=tags_str,
@@ -452,6 +572,7 @@ class DocSearchService:
                     "drive_file_id": file_id,
                     "drive_modified_time": modified_time,
                     "drive_mime_type": mime_type,
+                    "content_hash": content_hash,
                 }
                 if user_id:
                     temp_metadata["user_id"] = user_id
@@ -483,6 +604,18 @@ class DocSearchService:
                         "tags": tags_str
                     })
 
+                self._update_wiki_for_chunks(
+                    user_id=user_id,
+                    document_key=f"{SOURCE_ONEDRIVE}:{file_id}",
+                    file_name=file_name,
+                    chunks=chunks,
+                    topic=topic,
+                    category=category,
+                    tags=tags_list,
+                    source_type=SOURCE_ONEDRIVE,
+                    source_id=file_id,
+                )
+
                 delete_filter = {"$and": [{"drive_file_id": file_id}, {"source_type": SOURCE_ONEDRIVE}]}
                 if user_id:
                     delete_filter = {"$and": [{"drive_file_id": file_id}, {"source_type": SOURCE_ONEDRIVE}, {"user_id": user_id}]}
@@ -502,6 +635,7 @@ class DocSearchService:
                     drive_mime_type=mime_type,
                     user_id=user_id,
                     file_size=file_size,
+                    content_hash=content_hash,
                     topic=topic,
                     category=category,
                     tags=tags_str,

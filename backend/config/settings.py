@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
+    # Embeddings / Vector RAG
+    # "local" avoids API quota by running sentence-transformers on this machine.
+    # Other supported values: "gemini", "openai".
+    embedding_provider: str = "local"
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_batch_size: int = 32
+
     # ── Microsoft Azure / Graph ────────────────────────────────────────────
     azure_client_id: str = Field(default="", validation_alias=AliasChoices("AZURE_CLIENT_ID", "MS_CLIENT_ID"))
     azure_client_secret: str = Field(default="", validation_alias=AliasChoices("AZURE_CLIENT_SECRET", "MS_CLIENT_SECRET"))

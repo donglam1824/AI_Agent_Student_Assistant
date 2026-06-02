@@ -29,7 +29,7 @@ const SUGGESTIONS = [
   },
   {
     icon: Mail,
-    text: "Kiểm tra email mới từ giảng viên",
+    text: "Kiểm tra email mới",
     color: "text-purple-400",
   },
   {

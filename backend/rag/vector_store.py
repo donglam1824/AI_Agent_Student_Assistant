@@ -10,12 +10,11 @@ from typing import List, Optional, Dict, Any
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-from rag.embeddings import get_embeddings
+from rag.embeddings import get_embedding_collection_name, get_embeddings
 from core.logger import logger
 
 # Đường dẫn lưu ChromaDB
 CHROMA_DIR = Path(__file__).parent.parent / "data" / "chroma_db"
-COLLECTION_NAME = "student_documents"
 
 
 class VectorStore:
@@ -23,12 +22,13 @@ class VectorStore:
 
     def __init__(self):
         CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        collection_name = get_embedding_collection_name()
         self._db = Chroma(
-            collection_name=COLLECTION_NAME,
+            collection_name=collection_name,
             embedding_function=get_embeddings(),
             persist_directory=str(CHROMA_DIR),
         )
-        logger.info(f"VectorStore: collection={COLLECTION_NAME}, dir={CHROMA_DIR}")
+        logger.info(f"VectorStore: collection={collection_name}, dir={CHROMA_DIR}")
 
     def add_documents(self, documents: List[Document]) -> int:
         """Thêm chunks vào ChromaDB. Trả về số chunks đã thêm."""

@@ -190,17 +190,36 @@ def create_document(
     filename: str,
     file_type: str,
     file_size: int,
+    content_hash: str = None,
 ) -> Document:
     doc = Document(
         user_id=user_id,
         filename=filename,
         file_type=file_type,
         file_size=file_size,
+        content_hash=content_hash,
     )
     db.add(doc)
     db.commit()
     db.refresh(doc)
     return doc
+
+
+def get_user_document_by_hash(
+    db: Session,
+    user_id: str,
+    content_hash: str,
+    statuses: Optional[list[str]] = None,
+) -> Optional[Document]:
+    if not content_hash:
+        return None
+    query = db.query(Document).filter(
+        Document.user_id == user_id,
+        Document.content_hash == content_hash,
+    )
+    if statuses:
+        query = query.filter(Document.status.in_(statuses))
+    return query.order_by(Document.created_at.desc()).first()
 
 
 def update_document_status(
@@ -411,4 +430,3 @@ def update_email_preference(db: Session, user_id: str, **kwargs) -> Optional[Ema
         db.commit()
         db.refresh(pref)
     return pref
-

@@ -15,6 +15,9 @@ Google Drive endpoints:
 
 import os
 import shutil
+import hashlib
+import json
+import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
@@ -30,6 +33,43 @@ from core.logger import logger
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
+
+
+def _hash_file(file_path: str) -> str:
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _document_wiki_key(doc: Document) -> str:
+    """Stable key used by the Markdown wiki manifest."""
+    if doc.source_type in {"google_drive", "onedrive"} and doc.drive_file_id:
+        return f"{doc.source_type}:{doc.drive_file_id}"
+    return doc.id
+
+
+def _document_response(doc: Document, tags: Optional[List[str]] = None) -> "DocumentResponse":
+    if tags is None:
+        try:
+            tags = json.loads(doc.tags) if doc.tags else []
+        except Exception:
+            tags = []
+    return DocumentResponse(
+        id=doc.id,
+        filename=doc.filename,
+        file_type=doc.file_type,
+        file_size=doc.file_size,
+        chunk_count=doc.chunk_count,
+        status=doc.status,
+        error_message=doc.error_message,
+        topic=doc.topic,
+        category=doc.category,
+        tags=tags,
+        source_type=doc.source_type,
+        created_at=doc.created_at.isoformat(),
+    )
 
 
 # ── Response Models ───────────────────────────────────────────────────────
@@ -107,8 +147,18 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
             .first()
         )
         display_source = doc.filename if doc else os.path.basename(file_path)
+        content_hash = doc.content_hash if doc and doc.content_hash else ""
 
-        chunks = load_document(file_path)
+        chunks = load_document(
+            file_path,
+            metadata={
+                "doc_id": doc_id,
+                "user_id": user_id,
+                "source": display_source,
+                "source_type": "manual_upload",
+                "content_hash": content_hash,
+            },
+        )
         if not chunks:
             crud.update_document_status(db, doc_id, "error", error_message="Không thể đọc nội dung file.")
             return
@@ -128,8 +178,36 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
                 "source": display_source,
                 "topic": topic,
                 "category": category,
-                "tags": tags_str
+                "tags": tags_str,
+                "content_hash": content_hash,
             })
+
+        try:
+            from services.wiki_service import get_wiki_service
+
+            wiki_service = get_wiki_service()
+            wiki_result = wiki_service.upsert_document(
+                user_id=user_id,
+                document_key=doc_id,
+                title=display_source,
+                chunks=chunks,
+                topic=topic,
+                category=category,
+                tags=tags_list,
+                source_type="manual_upload",
+                source_id=doc_id,
+            )
+            wiki_service.contextualize_chunks(
+                chunks=chunks,
+                title=display_source,
+                topic=topic,
+                category=category,
+                tags=tags_list,
+                wiki_path=wiki_result.relative_document_path,
+                summary=wiki_result.summary,
+            )
+        except Exception as wiki_error:
+            logger.error(f"Document wiki update error for {doc_id}: {wiki_error}")
 
         vector_store = get_vector_store()
         vector_store.add_documents(chunks)
@@ -198,7 +276,8 @@ async def upload_document(
 ):
     """Upload a document for RAG processing."""
     allowed_types = {".pdf": "pdf", ".docx": "docx", ".txt": "txt"}
-    ext = os.path.splitext(file.filename)[1].lower()
+    safe_filename = os.path.basename(file.filename or "")
+    ext = os.path.splitext(safe_filename)[1].lower()
     if ext not in allowed_types:
         raise HTTPException(
             status_code=400,
@@ -206,36 +285,40 @@ async def upload_document(
         )
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    file_path = os.path.join(UPLOAD_DIR, f"{current_user.id}_{file.filename}")
+    file_path = os.path.join(UPLOAD_DIR, f"{current_user.id}_{uuid.uuid4().hex}_{safe_filename}")
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
     file_size = os.path.getsize(file_path)
+    content_hash = _hash_file(file_path)
+
+    existing_doc = crud.get_user_document_by_hash(
+        db,
+        current_user.id,
+        content_hash,
+        statuses=["processing", "ready"],
+    )
+    if existing_doc:
+        os.remove(file_path)
+        logger.info(
+            f"Upload skipped duplicate file for user={current_user.id}: "
+            f"{safe_filename} matches document {existing_doc.id}"
+        )
+        return _document_response(existing_doc)
 
     doc = crud.create_document(
         db=db,
         user_id=current_user.id,
-        filename=file.filename,
+        filename=safe_filename,
         file_type=allowed_types[ext],
         file_size=file_size,
+        content_hash=content_hash,
     )
 
     from db.database import DATABASE_URL
     background_tasks.add_task(_process_document, doc.id, file_path, DATABASE_URL, current_user.id)
 
-    return DocumentResponse(
-        id=doc.id,
-        filename=doc.filename,
-        file_type=doc.file_type,
-        file_size=doc.file_size,
-        chunk_count=doc.chunk_count,
-        status=doc.status,
-        topic=doc.topic,
-        category=doc.category,
-        tags=[],
-        source_type=doc.source_type,
-        created_at=doc.created_at.isoformat(),
-    )
+    return _document_response(doc, tags=[])
 
 
 @router.get("", response_model=list[DocumentResponse])
@@ -342,15 +425,37 @@ async def delete_document(
 ):
     """Delete a document and its embeddings."""
     docs = crud.get_user_documents(db, current_user.id)
-    if not any(d.id == doc_id for d in docs):
+    doc_to_delete = next((d for d in docs if d.id == doc_id), None)
+    if not doc_to_delete:
         raise HTTPException(status_code=404, detail="Tai lieu khong ton tai.")
 
     try:
         from rag.vector_store import get_vector_store
-        get_vector_store().delete_by_metadata({"doc_id": doc_id})
+
+        if doc_to_delete.source_type in {"google_drive", "onedrive"} and doc_to_delete.drive_file_id:
+            vector_filter = {
+                "$and": [
+                    {"drive_file_id": doc_to_delete.drive_file_id},
+                    {"source_type": doc_to_delete.source_type},
+                    {"user_id": current_user.id},
+                ]
+            }
+        else:
+            vector_filter = {"doc_id": doc_id}
+        get_vector_store().delete_by_metadata(vector_filter)
     except Exception as e:
         logger.error(f"Delete document vectors error: {e}")
         raise HTTPException(status_code=500, detail=f"Khong the xoa vector cua tai lieu: {str(e)}")
+
+    try:
+        from services.wiki_service import get_wiki_service
+
+        get_wiki_service().remove_document(
+            user_id=current_user.id,
+            document_key=_document_wiki_key(doc_to_delete),
+        )
+    except Exception as e:
+        logger.error(f"Delete document wiki error: {e}")
 
     crud.delete_document(db, doc_id)
 

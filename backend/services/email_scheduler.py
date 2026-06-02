@@ -45,33 +45,28 @@ def scan_academic_emails(user_id: str, scan_session: str):
         emails = email_svc.get_emails_since(last_scan, limit=20)
         
         if emails:
-            # Lọc email học thuật theo domains
-            academic_domains = []
-            if pref and pref.academic_domains:
-                import json
-                try:
-                    academic_domains = json.loads(pref.academic_domains)
-                except:
-                    pass
-            
-            if not academic_domains:
-                # Default
-                academic_domains = ["@hcmus.edu.vn", "@hcmut.edu.vn", "@ueh.edu.vn", "@edu.vn", "school", "university"]
-                
-            filtered_emails = []
-            for e in emails:
-                sender = e['sender'].lower()
-                is_academic = False
-                for domain in academic_domains:
-                    if domain in sender:
-                        is_academic = True
-                        break
-                
-                # Nơi này có thể gọi thêm LLM Classifier cho bước 2 như trong spec
-                # Tạm thời dựa vào domain/từ khóa sender để filter nhanh
-                if is_academic or "thầy" in sender or "cô" in sender or "teacher" in sender:
-                    filtered_emails.append(e)
-            
+            # Lọc email học thuật bằng module dùng chung (đa tầng)
+            from services.academic_filter import filter_academic_emails
+            from models.email import EmailMessage
+
+            # Chuyển dict → EmailMessage để dùng academic_filter
+            email_messages = [
+                EmailMessage(
+                    id=e["id"],
+                    subject=e.get("subject", ""),
+                    body_preview=e.get("snippet", ""),
+                    sender=e.get("sender", ""),
+                    received_date_time=e.get("date", ""),
+                    source="gmail",
+                )
+                for e in emails
+            ]
+            academic_msgs, _ = filter_academic_emails(email_messages, user_id=user_id)
+
+            # Map lại về raw dict cho email_analyzer (cần body đầy đủ)
+            academic_ids = {msg.id for msg in academic_msgs}
+            filtered_emails = [e for e in emails if e["id"] in academic_ids]
+
             if filtered_emails:
                 from services.email_analyzer import analyze_and_store_emails
 

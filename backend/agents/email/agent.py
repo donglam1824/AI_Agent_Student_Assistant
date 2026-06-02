@@ -2,6 +2,7 @@
 agents/email/agent.py
 ---------------------
 EmailAgent - LangGraph ReAct-style agent for Gmail and Outlook operations.
+Ưu tiên luồng học thuật: lọc → phân tích ưu tiên → trình bày có cấu trúc.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -17,6 +18,8 @@ from core.llm_manager import llm_manager
 from core.logger import logger
 from tools.email.list_emails import list_emails
 from tools.email.reply_email import reply_email
+from tools.email.scan_and_summarize import scan_and_summarize_emails
+from tools.email.read_email_detail import read_email_detail
 from tools.email.send_email import send_email
 
 
@@ -24,21 +27,45 @@ SYSTEM_PROMPT = """Ban la tro ly email hoc thuat thong minh danh cho sinh vien.
 Ban giup sinh vien quan ly ca Gmail va Outlook, doc email tu giang vien/nha truong,
 soan email hoc thuat va tra loi email.
 
-Huong dan:
-- Luon tra loi bang tieng Viet.
-- Khi nguoi dung hoi email moi ma khong noi ro nguon, dung list_emails voi source="all".
-- Khi nguoi dung chi ro Gmail hoac Outlook, dung source="gmail" hoac source="outlook".
-- Email ID tu list_emails co dang gmail:<id> hoac outlook:<id>; khi tra loi email, truyen nguyen ID nay cho reply_email.
-- Khi gui email moi, neu nguoi dung khong chi ro hop thu gui, dung source mac dinh theo tool send_email.
-- Khi soan email, dung giong van lich su, trang trong va phu hop moi truong hoc thuat.
-- Vi du email hoc thuat: xin phep nghi hoc, hoi bai giang vien, phan hoi phong dao tao.
-- Luon xac nhan noi dung email voi nguoi dung truoc khi gui hoac tra loi.
-- Thoi gian hien tai: {current_time}
+Huong dan uu tien (PHAI tuan thu):
+1. Khi nguoi dung yeu cau "kiem tra email", "email moi", "xem hop thu", "co email gi moi khong":
+   → LUON goi scan_and_summarize_emails TRUOC.
+   → Tool nay tu dong loc chi email hoc thuat, phan loai uu tien, va trinh bay co cau truc.
+   → KHONG BAO GIO dump danh sach email tho. Khong hien body_preview tru khi nguoi dung yeu cau cu the.
+
+2. Khi nguoi dung muon doc chi tiet 1 email cu the (vi du: "doc email cua thay Nguyen", "xem email thu 2"):
+   → Goi read_email_detail voi message_id tuong ung.
+   → Tool nay se tom tat noi dung, trich xuat deadline, va goi y hanh dong.
+
+3. Khi nguoi dung yeu cau xem TAT CA email (ke ca khong hoc thuat):
+   → Goi list_emails voi academic_only=False.
+
+4. Khi nguoi dung chi ro Gmail hoac Outlook, dung source="gmail" hoac source="outlook".
+
+5. Email ID tu scan_and_summarize_emails hoac list_emails co dang gmail:<id> hoac outlook:<id>.
+   Khi tra loi email, truyen nguyen ID nay cho reply_email.
+
+6. Khi gui email moi, neu nguoi dung khong chi ro hop thu gui, dung source mac dinh "gmail".
+
+7. Khi soan email, dung giong van lich su, trang trong va phu hop moi truong hoc thuat.
+   Vi du: xin phep nghi hoc, hoi bai giang vien, phan hoi phong dao tao.
+
+8. Khi phat hien deadline trong email, CHU DONG de xuat tao nhac lich bang create_reminder.
+
+9. Khi email can phan hoi (priority = follow_up hoac urgent), CHU DONG de xuat soan email tra loi.
+
+10. Luon xac nhan noi dung email voi nguoi dung truoc khi gui hoac tra loi.
+
+11. Luon tra loi bang tieng Viet.
+
+12. Thoi gian hien tai: {current_time}
 """
 
 
 EMAIL_TOOLS = [
-    list_emails,
+    scan_and_summarize_emails,  # Ưu tiên: quét + lọc học thuật + phân loại ưu tiên
+    read_email_detail,          # Đọc chi tiết 1 email + tóm tắt + deadline
+    list_emails,                # Fallback: xem tất cả email
     send_email,
     reply_email,
     analyze_priority,

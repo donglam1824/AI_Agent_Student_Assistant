@@ -224,3 +224,23 @@ report/
 *.db-wal
 
 backend/data/chroma_db
+# Added by code-review-graph
+.code-review-graph/
+
+# Runtime/generated data
+backend/data/
+
+# Local AI assistant/editor configuration
+/.claude/
+/.gemini/
+/.kiro/
+/.qoder/
+/.cursorrules
+/.windsurfrules
+/.mcp.json
+/.opencode.json
+/.github/code-review-graph.instruction.md
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/QODER.md
