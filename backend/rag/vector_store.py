@@ -6,6 +6,7 @@ Lưu dữ liệu tại: data/chroma_db/ (persistent local)
 """
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+import warnings
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -64,11 +65,43 @@ class VectorStore:
         Lưu ý: score mà ChromaDB trả về là distance (càng nhỏ càng giống).
         Do Langchain đã map thành relevance_score (càng gần 1 càng giống).
         """
-        results = self._db.similarity_search_with_relevance_scores(
-            query=query, k=k, filter=filter
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Relevance scores must be between 0 and 1.*",
+                category=UserWarning,
+            )
+            results = self._db.similarity_search_with_relevance_scores(
+                query=query, k=k, filter=filter
+            )
         logger.debug(f"VectorStore: tìm '{query[:50]}...' → {len(results)} kết quả")
         return results
+
+    def get_documents(
+        self,
+        filter: Optional[Dict[str, Any]] = None,
+        limit: int = 1000,
+    ) -> List[Document]:
+        """Return stored chunks for local lexical reranking/fallback."""
+        kwargs: Dict[str, Any] = {
+            "include": ["documents", "metadatas"],
+            "limit": limit,
+        }
+        if filter:
+            kwargs["where"] = filter
+
+        result = self._db._collection.get(**kwargs)
+        ids = result.get("ids") or []
+        documents = result.get("documents") or []
+        metadatas = result.get("metadatas") or []
+
+        docs: List[Document] = []
+        for i, content in enumerate(documents):
+            metadata = dict(metadatas[i] or {}) if i < len(metadatas) else {}
+            if i < len(ids):
+                metadata["_chroma_id"] = ids[i]
+            docs.append(Document(page_content=content or "", metadata=metadata))
+        return docs
 
     def count(self) -> int:
         """Số chunks hiện có trong collection."""

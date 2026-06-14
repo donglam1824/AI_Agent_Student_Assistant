@@ -1,13 +1,13 @@
 """
 rag/document_loader.py
 ----------------------
-Load PDF, DOCX, TXT files thành danh sách Document của LangChain.
+Load PDF, DOCX, PPTX, TXT files thành danh sách Document của LangChain.
 Tối ưu hóa chunking sử dụng Semantic Separators ranh giới ngữ nghĩa.
 
 Hỗ trợ 3 nguồn:
-  1. load(file_path)        — file trên disk (PDF/DOCX/TXT)
+  1. load(file_path)        — file trên disk (PDF/DOCX/PPTX/TXT)
   2. load_from_text(text)   — text thuần (Google Docs/Slides/Sheets export)
-  3. load_from_bytes(bytes) — binary content (PDF/DOCX tải từ Drive)
+  3. load_from_bytes(bytes) — binary content (PDF/DOCX/PPTX tải từ Drive)
 """
 import hashlib
 import json
@@ -28,6 +28,7 @@ from core.logger import logger
 CHUNK_SIZE = 1000       # ký tự per chunk
 CHUNK_OVERLAP = 200     # overlap để không mất context ở ranh giới
 MARKDOWN_CACHE_DIR = Path(__file__).parent.parent / "data" / "markdown_cache"
+OFFICE_EXTENSIONS = {".docx", ".pptx"}
 
 _MARKER_UNAVAILABLE_REASON: Optional[str] = None
 
@@ -72,12 +73,12 @@ class DocumentLoader:
 
         if ext == ".pdf":
             raw_docs = self._load_pdf(path, metadata)
-        elif ext == ".docx":
-            raw_docs = self._load_docx(path)
+        elif ext in OFFICE_EXTENSIONS:
+            raw_docs = self._load_office_with_markitdown(path)
         elif ext == ".txt":
             raw_docs = self._load_txt(path)
         else:
-            raise ValueError(f"Định dạng không hỗ trợ: {ext}. Chỉ nhận PDF, DOCX, TXT.")
+            raise ValueError(f"Định dạng không hỗ trợ: {ext}. Chỉ nhận PDF, DOCX, PPTX, TXT.")
 
         chunks = self._splitter.split_documents(raw_docs)
         for chunk in chunks:
@@ -115,12 +116,12 @@ class DocumentLoader:
 
     def load_from_bytes(self, content: bytes, ext: str, metadata: dict) -> List[Document]:
         """
-        Load từ binary content (file download từ Google Drive).
-        Dùng cho: PDF, DOCX tải từ Drive.
+        Load từ binary content (file download từ Google Drive/OneDrive).
+        Dùng cho: PDF, DOCX, PPTX tải từ Drive.
 
         Args:
             content: Nội dung binary của file.
-            ext: Extension file (".pdf", ".docx", ".txt").
+            ext: Extension file (".pdf", ".docx", ".pptx", ".txt").
             metadata: Dict chứa source, drive_file_id, v.v.
         Returns:
             Danh sách Document chunks.
@@ -140,8 +141,8 @@ class DocumentLoader:
         try:
             if ext == ".pdf":
                 raw_docs = self._load_pdf(tmp_path, metadata)
-            elif ext == ".docx":
-                raw_docs = self._load_docx(tmp_path)
+            elif ext in OFFICE_EXTENSIONS:
+                raw_docs = self._load_office_with_markitdown(tmp_path)
             elif ext in (".txt", ".csv"):
                 raw_docs = self._load_txt(tmp_path)
             else:
@@ -387,13 +388,37 @@ class DocumentLoader:
         cleaned = cleaned.strip("._")
         return cleaned[:120] or "unknown"
 
-    def _load_docx(self, path: Path) -> List[Document]:
-        from docx import Document as DocxDocument
-        doc = DocxDocument(str(path))
-        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    def _load_office_with_markitdown(self, path: Path) -> List[Document]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError as e:
+            raise RuntimeError(
+                "MarkItDown is required to parse DOCX/PPTX files. "
+                "Install backend requirements to enable Office document support."
+            ) from e
+
+        try:
+            result = MarkItDown().convert(str(path))
+        except Exception as e:
+            raise RuntimeError(f"MarkItDown failed to parse {path.name}: {e}") from e
+
+        markdown = (
+            getattr(result, "text_content", None)
+            or getattr(result, "markdown", None)
+            or getattr(result, "text", None)
+            or ""
+        )
+        if not markdown.strip():
+            raise RuntimeError(f"MarkItDown returned empty content for {path.name}")
+
         return [Document(
-            page_content=text,
-            metadata={"source": path.name, "file_path": str(path)},
+            page_content=markdown,
+            metadata={
+                "source": path.name,
+                "file_path": str(path),
+                "parser": "markitdown",
+                "content_format": "markdown",
+            },
         )]
 
     def _load_txt(self, path: Path) -> List[Document]:

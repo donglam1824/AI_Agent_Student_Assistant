@@ -4,14 +4,14 @@ services/google_drive_service.py
 GoogleDriveService: kết nối Google Drive API để:
   - Liệt kê thư mục và file của người dùng
   - Export Google Docs/Sheets/Slides sang text
-  - Download file thông thường (PDF, DOCX, TXT)
+  - Download file thông thường (PDF, DOCX, PPTX, TXT)
   - Lấy metadata file (name, modifiedTime, size)
 
 Hỗ trợ MIME types:
   - Google Docs      → export text/plain
   - Google Sheets    → export text/csv
   - Google Slides    → export text/plain
-  - PDF, DOCX, TXT   → download trực tiếp
+  - PDF, DOCX, PPTX, TXT → download trực tiếp
   - Khác             → bỏ qua
 """
 from __future__ import annotations
@@ -39,6 +39,7 @@ GOOGLE_EXPORT_MAP = {
 BINARY_DOWNLOAD_MAP = {
     "application/pdf":                                                          ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
     "text/plain": ".txt",
 }
 
@@ -72,6 +73,7 @@ class DriveFile:
             "application/vnd.google-apps.presentation": "Google Slides",
             "application/pdf":                          "PDF",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
             "text/plain": "TXT",
         }
         return labels.get(self.mime_type, "Không hỗ trợ")
@@ -214,7 +216,7 @@ class GoogleDriveService:
 
         Returns:
             Tuple (extension, content_bytes)
-            - extension: ".txt", ".pdf", ".docx", ".csv"
+            - extension: ".txt", ".pdf", ".docx", ".pptx", ".csv"
             - content_bytes: nội dung nhị phân của file
         """
         mime = file.mime_type

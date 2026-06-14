@@ -23,6 +23,7 @@ from db import crud
 from db.models import Document, User
 from api.deps import get_current_user
 from core.logger import logger
+from services.intent_router import IntentRouter
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -54,16 +55,6 @@ class MessageResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-VALID_INTENTS = {"calendar", "note", "email", "docsearch", "teams", "unknown"}
-
-
-def _normalize_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFD", text.lower())
-    return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-
-
-def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword in text for keyword in keywords)
 
 
 def _parse_source_scope(raw_scope: Optional[str | Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -135,98 +126,12 @@ def _normalize_source_scope(
     raise HTTPException(status_code=400, detail="Source scope khong hop le.")
 
 
-def _keyword_intent(text: str) -> Optional[str]:
-    text_lower = text.lower()
-    normalized = _normalize_text(text)
-
-    calendar_keywords = (
-        "lịch", "lich", "calendar", "thời khóa biểu", "thoi khoa bieu",
-        "lịch học", "lich hoc", "cuộc họp", "cuoc hop", "sự kiện",
-        "su kien", "hẹn", "hen", "deadline",
-    )
-    note_keywords = (
-        "ghi chú", "ghi chu", "note", "lưu lại", "luu lai", "lưu ghi chú",
-        "luu ghi chu", "tạo ghi chú", "tao ghi chu", "xem ghi chú",
-        "xem ghi chu", "liệt kê ghi chú", "liet ke ghi chu",
-    )
-    email_keywords = (
-        "email", "gmail", "hộp thư", "hop thu", "soạn thư", "soan thu",
-        "gửi mail", "gui mail", "gửi email", "gui email", "trả lời mail",
-        "tra loi mail", "thư phản hồi", "thu phan hoi",
-    )
-    teams_keywords = (
-        "microsoft teams", "teams", "lớp teams", "lop teams",
-        "kênh teams", "kenh teams", "tin nhắn lớp", "tin nhan lop",
-        "bài tập teams", "bai tap teams",
-    )
-    if _contains_any(text_lower, note_keywords) or _contains_any(normalized, note_keywords):
-        return "note"
-    if _contains_any(text_lower, email_keywords) or _contains_any(normalized, email_keywords):
-        return "email"
-    if _contains_any(text_lower, teams_keywords) or _contains_any(normalized, teams_keywords):
-        return "teams"
-
-    docsearch_keywords = (
-        "tài liệu", "tai lieu", "tệp", "tep", "file", "pdf", "docx", "txt",
-        "upload", "tải lên", "tai len", "đã tải", "da tai", "slide",
-        "giáo trình", "giao trinh", "trong tài liệu", "trong tai lieu",
-        "trong file", "trong pdf",
-    )
-    study_summary_keywords = (
-        "tóm tắt chương", "tom tat chuong", "tóm tắt bài", "tom tat bai",
-        "tóm tắt môn", "tom tat mon", "giải thích chương", "giai thich chuong",
-        "nội dung chương", "noi dung chuong", "ôn tập chương", "on tap chuong",
-    )
-    if (
-        _contains_any(text_lower, docsearch_keywords)
-        or _contains_any(normalized, docsearch_keywords)
-        or _contains_any(text_lower, study_summary_keywords)
-        or _contains_any(normalized, study_summary_keywords)
-    ):
-        return "docsearch"
-
-    if _contains_any(text_lower, calendar_keywords) or _contains_any(normalized, calendar_keywords):
-        return "calendar"
-
-    return None
-
-
-def _parse_llm_intent(raw_intent: str) -> str:
-    intent = raw_intent.strip().lower()
-    if intent in VALID_INTENTS:
-        return intent
-
-    mentioned = VALID_INTENTS.intersection(set(re.findall(r"[a-z]+", intent)))
-    if len(mentioned) == 1:
-        return mentioned.pop()
-    return "unknown"
-
+_intent_router = IntentRouter()
 
 def _classify_intent(text: str) -> str:
     """Classify user intent for chat routing."""
-    keyword_intent = _keyword_intent(text)
-    if keyword_intent:
-        return keyword_intent
-
-    from core.llm_manager import llm_manager, coerce_message_content
-    llm = llm_manager.get("default")
-    prompt = (
-        "Bạn là bộ định tuyến cực kỳ chính xác cho trợ lý sinh viên đại học.\n"
-        "Phân loại câu hỏi của sinh viên vào ĐÚNG 1 nhóm:\n\n"
-        "1. 'calendar': Xem/tạo/sửa/xóa lịch, thời khóa biểu, cuộc họp, sự kiện, deadline.\n"
-        "2. 'note': Tạo, lưu, xem, liệt kê, quản lý ghi chú cá nhân.\n"
-        "3. 'email': Soạn thư, gửi email, kiểm tra hòm thư, xử lý thư phản hồi.\n"
-        "4. 'docsearch': Hỏi kiến thức, tóm tắt bài học, tìm kiếm nội dung tài liệu, "
-        "hỏi đáp về chương/môn/slide, hoặc quản lý tài liệu (upload, liệt kê file). "
-        "Câu hỏi học thuật chung (ví dụ: 'đạo hàm là gì', 'giải thích OOP') cũng thuộc nhóm này.\n"
-        "5. 'teams': Microsoft Teams – lớp học, kênh, tin nhắn, bài tập trên Teams.\n\n"
-        "Nếu câu hỏi mang tính trò chuyện xã giao hoặc hoàn toàn không liên quan, trả về 'unknown'.\n\n"
-        f"Câu hỏi: \"{text}\"\n\n"
-        "CHỈ trả về ĐÚNG 1 TỪ (lowercase): calendar | note | email | docsearch | teams | unknown"
-    )
-    response = llm.invoke(prompt)
-    intent = _parse_llm_intent(coerce_message_content(response.content))
-    return intent if intent != "unknown" else (_keyword_intent(text) or "unknown")
+    result = _intent_router.classify(text)
+    return result.intent
 
 
 def _user_has_ready_documents(db: Session, user_id: str) -> bool:

@@ -17,9 +17,10 @@ interface DropZoneProps {
 const ACCEPTED_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "text/plain",
 ];
-const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt";
+const ACCEPTED_EXTENSIONS = ".pdf,.docx,.pptx,.txt";
 
 export function DropZone({ onUpload, disabled = false }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -102,7 +103,7 @@ export function DropZone({ onUpload, disabled = false }: DropZoneProps) {
             {isDragging ? "Thả file vào đây" : "Kéo thả file hoặc nhấn để chọn"}
           </p>
           <p className="text-xs text-text-secondary mt-1">
-            Hỗ trợ: PDF, DOCX, TXT
+            Hỗ trợ: PDF, DOCX, PPTX, TXT
           </p>
         </div>
       </div>
@@ -112,5 +113,7 @@ export function DropZone({ onUpload, disabled = false }: DropZoneProps) {
 
 function isValidFile(file: File): boolean {
   const ext = file.name.split(".").pop()?.toLowerCase();
-  return ["pdf", "docx", "txt"].includes(ext || "");
+  const hasValidExtension = ["pdf", "docx", "pptx", "txt"].includes(ext || "");
+  const hasValidMime = !file.type || ACCEPTED_TYPES.includes(file.type);
+  return hasValidExtension && hasValidMime;
 }

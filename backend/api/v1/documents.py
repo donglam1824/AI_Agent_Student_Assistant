@@ -137,6 +137,7 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
 
     try:
         from rag.document_loader import load_document
+        from rag.enrichment import prepare_chunks_for_index
         from rag.vector_store import get_vector_store
         from services.topic_classifier import TopicClassifier
         import json
@@ -209,6 +210,7 @@ def _process_document(doc_id: str, file_path: str, db_url: str, user_id: str):
         except Exception as wiki_error:
             logger.error(f"Document wiki update error for {doc_id}: {wiki_error}")
 
+        prepare_chunks_for_index(chunks)
         vector_store = get_vector_store()
         vector_store.add_documents(chunks)
 
@@ -275,7 +277,7 @@ async def upload_document(
     db: Session = Depends(get_db),
 ):
     """Upload a document for RAG processing."""
-    allowed_types = {".pdf": "pdf", ".docx": "docx", ".txt": "txt"}
+    allowed_types = {".pdf": "pdf", ".docx": "docx", ".pptx": "pptx", ".txt": "txt"}
     safe_filename = os.path.basename(file.filename or "")
     ext = os.path.splitext(safe_filename)[1].lower()
     if ext not in allowed_types:
@@ -495,7 +497,7 @@ async def list_drive_files(
 ):
     """
     List file duoc ho tro trong Google Drive (hoac trong thu muc cu the).
-    Chi tra ve: Google Docs, Sheets, Slides, PDF, DOCX, TXT.
+    Chi tra ve: Google Docs, Sheets, Slides, PDF, DOCX, PPTX, TXT.
     """
     from config.settings import settings
     access_token, refresh_token = _get_user_tokens(current_user, db)

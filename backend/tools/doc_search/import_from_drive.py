@@ -71,7 +71,7 @@ def guide_drive_import(file_description: str = "") -> str:
         "Để đưa tài liệu từ Google Drive vào hệ thống tìm kiếm, hãy:\n\n"
         "1. Vào trang **Quản lý Tài liệu** (biểu tượng 📚 trên sidebar)\n"
         "2. Chọn tab **Google Drive**\n"
-        "3. Browse thư mục và chọn file bạn muốn (PDF, DOCX, Google Docs, Sheets, Slides)\n"
+        "3. Browse thư mục và chọn file bạn muốn (PDF, DOCX, PPTX, Google Docs, Sheets, Slides)\n"
         "4. Nhấn nút **Import vào ORCA**\n\n"
         "Sau khi import xong, bạn có thể hỏi tôi về nội dung file đó!"
     )

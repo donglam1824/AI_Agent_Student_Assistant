@@ -17,7 +17,7 @@ const FEATURES = [
   { icon: Calendar, label: "Quản lý lịch học", desc: "Tạo, xem lịch qua Google Calendar" },
   { icon: StickyNote, label: "Ghi chú thông minh", desc: "Ghi chú lưu trên Google Tasks" },
   { icon: Mail, label: "Email", desc: "Đọc, tóm tắt, soạn email" },
-  { icon: BookOpen, label: "Tìm kiếm tài liệu", desc: "Hỏi đáp từ PDF, DOCX, TXT" },
+  { icon: BookOpen, label: "Tìm kiếm tài liệu", desc: "Hỏi đáp từ PDF, DOCX, PPTX, TXT" },
 ];
 
 // Scopes xin quyền từ Google
@@ -72,9 +72,9 @@ export default function LoginPage() {
         // Lưu token JWT và thông tin user vào store
         setAuth(data.user, data.access_token);
         router.push("/chat");
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Login error:", err);
-        setErrorMsg(err.message || "Đã có lỗi xảy ra. Vui lòng thử lại.");
+        setErrorMsg(err instanceof Error ? err.message : "Đã có lỗi xảy ra. Vui lòng thử lại.");
         setIsLoading(false);
       }
     },

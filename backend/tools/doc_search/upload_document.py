@@ -13,7 +13,7 @@ from core.logger import logger
 def upload_document(file_path: str, config: RunnableConfig = None) -> str:
     """
     Upload và lưu tài liệu vào hệ thống tìm kiếm.
-    Hỗ trợ định dạng: PDF, DOCX, TXT.
+    Hỗ trợ định dạng: PDF, DOCX, PPTX, TXT.
 
     Args:
         file_path: Đường dẫn tuyệt đối đến file cần upload.

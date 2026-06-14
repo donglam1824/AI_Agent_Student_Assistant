@@ -92,7 +92,7 @@ export function ChatInput({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx,.txt"
+            accept=".pdf,.docx,.pptx,.txt"
             onChange={handleFileChange}
             className="hidden"
           />

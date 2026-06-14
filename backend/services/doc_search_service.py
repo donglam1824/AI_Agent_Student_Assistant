@@ -5,7 +5,7 @@ DocSearchService: orchestrate upload và search,
 quản lý metadata tài liệu trong SQLite thông qua SQLAlchemy.
 
 Hỗ trợ 2 nguồn tài liệu:
-  1. Manual upload (PDF, DOCX, TXT từ giao diện web)
+  1. Manual upload (PDF, DOCX, PPTX, TXT từ giao diện web)
   2. Google Drive & OneDrive (import file đã chọn hoặc sync lại)
 """
 from datetime import datetime
@@ -16,6 +16,7 @@ import json
 import uuid
 
 from rag.document_loader import DocumentLoader
+from rag.enrichment import prepare_chunks_for_index
 from rag.vector_store import get_vector_store
 from rag.retriever import Retriever
 from core.logger import logger
@@ -35,7 +36,10 @@ class DocSearchService:
 
     def __init__(self):
         self._loader = DocumentLoader()
-        self._retriever = Retriever(k=5, score_threshold=0.3)
+        # Local sentence-transformer relevance scores are conservative for short
+        # Vietnamese concept questions, so keep the cutoff below the observed
+        # boundary where relevant chunks were being dropped.
+        self._retriever = Retriever(k=8, score_threshold=0.2)
 
     def _metadata_filter_for_scope(
         self,
@@ -383,6 +387,7 @@ class DocSearchService:
             source_id=str(path),
         )
 
+        prepare_chunks_for_index(chunks)
         store = get_vector_store()
         num_added = store.add_documents(chunks)
         
@@ -514,6 +519,7 @@ class DocSearchService:
                 self._delete_metadata_by_drive_id(file_id, user_id=user_id, source_type=SOURCE_DRIVE)
 
                 # Lưu vào ChromaDB
+                prepare_chunks_for_index(chunks)
                 store.add_documents(chunks)
                 num_chunks = len(chunks)
 
@@ -626,6 +632,7 @@ class DocSearchService:
                     size=file_size,
                 )
                 ext, content_bytes = drive_svc.get_file_content(drive_file)
+                content_hash = self._hash_bytes(content_bytes)
 
                 # Temp metadata for chunk loader
                 temp_metadata = {
@@ -684,6 +691,7 @@ class DocSearchService:
                 store.delete_by_metadata(delete_filter)
                 self._delete_metadata_by_drive_id(file_id, user_id=user_id, source_type=SOURCE_ONEDRIVE)
 
+                prepare_chunks_for_index(chunks)
                 store.add_documents(chunks)
                 num_chunks = len(chunks)
 

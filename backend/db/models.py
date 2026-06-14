@@ -84,7 +84,7 @@ class Document(Base):
     id = Column(String, primary_key=True, default=_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     filename = Column(String, nullable=False)
-    file_type = Column(String, nullable=False)  # "pdf" | "docx" | "txt"
+    file_type = Column(String, nullable=False)  # "pdf" | "docx" | "pptx" | "txt"
     file_size = Column(Integer, nullable=False)  # bytes
     content_hash = Column(String, nullable=True, index=True)  # sha256 of uploaded/downloaded content
     chunk_count = Column(Integer, default=0)

@@ -1,4 +1,4 @@
-# BÁO CÁO TIẾN ĐỘ THỰC HIỆN ĐỀ TÀI (Cập nhật: 01/06/2026)
+# BÁO CÁO TIẾN ĐỘ THỰC HIỆN ĐỀ TÀI (Cập nhật: 03/06/2026)
 
 ## Mô tả đề tài
 **Tên đề tài:** Hệ thống Multi-Agent AI hỗ trợ quản lý tri thức và trợ lý học tập cá nhân cho sinh viên
@@ -160,12 +160,42 @@ Trong giai đoạn này, hệ thống tiếp tục được **hoàn thiện theo
 - **Cập nhật dependency xử lý tài liệu:** Bổ sung `marker-pdf` và cấu hình liên quan để phục vụ pipeline chuyển đổi PDF sang Markdown.
 - **Cải thiện giao diện phụ trợ:** Tinh chỉnh giao diện email panel, badge agent và các thông báo OAuth Microsoft bằng tiếng Việt để trải nghiệm đồng nhất hơn.
 
-## Kế hoạch thực hiện 1–2 tuần tới (Sau 01/06/2026)
+## Kết quả đã đạt được (Từ 01/06/2026 đến 03/06/2026)
+
+Trong giai đoạn này, hệ thống tập trung **tối ưu chất lượng truy xuất tri thức RAG**, đặc biệt với các câu hỏi tiếng Việt ngắn, câu hỏi khái niệm và trường hợp semantic search thuần chưa trả về đúng đoạn tài liệu liên quan.
+
+### 1. Nâng cấp Retriever thành Hybrid Retriever
+
+- **Kết hợp semantic search và lexical rerank:** `Retriever` được nâng cấp từ truy xuất thuần vector sang cơ chế hybrid. Hệ thống vẫn dùng Chroma semantic search làm bước đầu, sau đó bổ sung lượt tìm kiếm lexical cục bộ trên cùng phạm vi dữ liệu đã lọc để tăng khả năng bắt đúng từ khóa, cụm từ và metadata.
+- **Cải thiện truy vấn tiếng Việt:** Bổ sung chuẩn hóa Unicode, bỏ dấu tiếng Việt, tách token và loại stopword để xử lý tốt hơn các câu hỏi nhập nhanh, không dấu hoặc chỉ chứa một vài khái niệm chính.
+- **Rerank theo nhiều tín hiệu:** Kết quả được chấm lại bằng tổ hợp điểm semantic, điểm lexical và metadata boost dựa trên `source`, `topic`, `category`, `tags`, `context_summary`. Cách này giúp ưu tiên đoạn tài liệu khớp cả nội dung lẫn ngữ cảnh học tập.
+- **Fallback an toàn khi điểm thấp:** Khi không có chunk vượt ngưỡng đầy đủ nhưng vẫn có kết quả tương đối liên quan, retriever có thể trả về chunk tốt nhất để giảm tình trạng "không tìm thấy tài liệu" trong các truy vấn hợp lệ nhưng embedding cho điểm thấp.
+
+### 2. Làm giàu nội dung trước khi index vào Vector Store
+
+- **Module enrichment mới:** Bổ sung `rag/enrichment.py` với hàm `prepare_chunks_for_index`, dùng để đưa `context_prefix` vào nội dung được embedding trước khi lưu vào ChromaDB.
+- **Giữ nguyên nội dung gốc cho câu trả lời:** Nội dung chunk ban đầu được lưu vào metadata `raw_content`, còn `page_content` được làm giàu để phục vụ truy xuất. Khi format context cho LLM, hệ thống ưu tiên dùng `raw_content` để tránh lặp lại phần prefix và giữ câu trả lời tự nhiên.
+- **Áp dụng đồng bộ cho nhiều luồng nhập liệu:** Enrichment được gọi trong các luồng upload tài liệu thủ công, xử lý background document API, import Google Drive và import OneDrive, giúp chất lượng index nhất quán giữa các nguồn tài liệu.
+
+### 3. Mở rộng Vector Store phục vụ tìm kiếm cục bộ
+
+- **Bổ sung truy xuất danh sách chunks:** `VectorStore` có thêm `get_documents(filter, limit)` để lấy các chunk đã lưu trong ChromaDB theo phạm vi user/document, phục vụ lexical reranking mà không cần tạo thêm cơ sở dữ liệu phụ.
+- **Giữ metadata `_chroma_id`:** Khi đọc chunk từ ChromaDB, hệ thống gắn lại id nội bộ vào metadata để tránh trùng lặp ứng viên khi kết hợp kết quả semantic và lexical.
+- **Ổn định log/warning:** Các cảnh báo relevance score ngoài khoảng chuẩn từ Chroma/LangChain được lọc để log vận hành gọn hơn trong quá trình truy vấn.
+
+### 4. Điều chỉnh DocSearch Service cho chất lượng truy vấn thực tế
+
+- **Tăng số kết quả truy xuất:** `DocSearchService` chuyển sang dùng `Retriever(k=8, score_threshold=0.2)` để lấy thêm ngữ cảnh cho LLM và giảm rủi ro loại nhầm đoạn liên quan trong tài liệu tiếng Việt.
+- **Nhất quán metadata cho OneDrive:** Luồng sync/import OneDrive được bổ sung tính toán `content_hash`, hỗ trợ kiểm tra thay đổi nội dung và đồng bộ lại tài liệu chính xác hơn.
+- **Chuẩn bị script kiểm tra nội bộ:** Tạo các script scratch để kiểm tra database, log và truy vấn RAG trong quá trình debug/tối ưu. Các script này phục vụ phát triển nội bộ, chưa được đưa vào luồng sản phẩm chính.
+
+## Kế hoạch thực hiện 1–2 tuần tới (Sau 03/06/2026)
 
 **Tuần tiếp theo: Kiểm thử tích hợp và Tối ưu hóa**
 - Kiểm thử end-to-end các luồng chính: đăng nhập Google, kết nối Microsoft, chat với từng agent, upload/import tài liệu, tìm kiếm RAG, quét email học thuật và đọc chi tiết email.
 - Kiểm thử tương tác chéo giữa các agents, đặc biệt luồng Email Agent phát hiện deadline → Calendar Agent tạo sự kiện/nhắc lịch tương ứng.
-- Đo hiệu năng pipeline RAG với tài liệu lớn, kiểm tra thời gian chuyển PDF sang Markdown, tốc độ embedding và tốc độ truy vấn ChromaDB.
+- Đo hiệu năng pipeline RAG với tài liệu lớn, kiểm tra thời gian chuyển PDF sang Markdown, tốc độ embedding, tốc độ truy vấn ChromaDB và chi phí của bước lexical rerank cục bộ.
+- Kiểm thử chất lượng hybrid retrieval bằng bộ câu hỏi tiếng Việt có dấu/không dấu, câu hỏi khái niệm ngắn và câu hỏi theo chủ đề/danh mục tài liệu.
 - Rà soát lỗi biên của bộ lọc email học thuật, bổ sung domain/keyword phổ biến và giảm false positive/false negative.
 
 **Tuần sau: Hoàn thiện giao diện và Viết báo cáo**

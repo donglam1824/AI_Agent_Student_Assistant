@@ -37,7 +37,7 @@ const PROVIDER_CONFIG = {
     loadError: "Khong the tai noi dung Google Drive",
     importError: "Import tu Google Drive that bai",
     syncError: "Sync Google Drive that bai",
-    hint: "Ho tro: Google Docs, Sheets, Slides, PDF, DOCX, TXT",
+    hint: "Ho tro: Google Docs, Sheets, Slides, PDF, DOCX, PPTX, TXT",
   },
   onedrive: {
     title: "OneDrive",
@@ -45,7 +45,7 @@ const PROVIDER_CONFIG = {
     loadError: "Khong the tai noi dung OneDrive",
     importError: "Import tu OneDrive that bai",
     syncError: "Sync OneDrive that bai",
-    hint: "Ho tro: PDF, DOCX, TXT",
+    hint: "Ho tro: PDF, DOCX, PPTX, TXT",
   },
 } as const;
 
@@ -56,6 +56,7 @@ function getMimeIcon(typeLabel: string): string {
     "Google Slides": "PPT",
     PDF: "PDF",
     DOCX: "DOC",
+    PPTX: "PPT",
     TXT: "TXT",
   };
   return icons[typeLabel] || "DOC";

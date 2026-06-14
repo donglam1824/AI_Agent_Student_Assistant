@@ -17,6 +17,7 @@ GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 BINARY_DOWNLOAD_MAP = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
     "text/plain": ".txt",
 }
 
@@ -41,6 +42,7 @@ class OneDriveFile:
         labels = {
             "application/pdf": "PDF",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
             "text/plain": "TXT",
         }
         return labels.get(self.mime_type, "Khong ho tro")
