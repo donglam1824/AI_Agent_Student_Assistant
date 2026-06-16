@@ -538,3 +538,37 @@ body {
 .import-result-item:last-child { border-bottom: none; }
 .import-result-item.success { color: var(--success); }
 .import-result-item.error { color: var(--error); }
+
+/* === FullCalendar Customization === */
+.orca-calendar {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--bg-elevated);
+  --fc-neutral-text-color: var(--text-secondary);
+  --fc-today-bg-color: var(--accent-light);
+}
+
+.orca-calendar .fc {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.orca-calendar .fc-theme-standard td, 
+.orca-calendar .fc-theme-standard th, 
+.orca-calendar .fc-theme-standard .fc-scrollgrid {
+  border-color: var(--border) !important;
+}
+
+.orca-calendar .fc-col-header-cell-cushion,
+.orca-calendar .fc-daygrid-day-number,
+.orca-calendar .fc-timegrid-slot-label-cushion,
+.orca-calendar .fc-timegrid-axis-cushion,
+.orca-calendar .fc-list-day-text,
+.orca-calendar .fc-list-day-side-text {
+  color: var(--text-primary) !important;
+  text-decoration: none;
+}
+
+.orca-calendar .fc-event {
+  cursor: pointer;
+}

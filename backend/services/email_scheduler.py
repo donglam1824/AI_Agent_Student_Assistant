@@ -41,8 +41,9 @@ def scan_academic_emails(user_id: str, scan_session: str):
             
         from services.google_email_service import GoogleEmailService
 
+        import asyncio
         email_svc = GoogleEmailService(user_id)
-        emails = email_svc.get_emails_since(last_scan, limit=20)
+        emails = asyncio.run(email_svc.get_emails_since(last_scan, limit=20))
         
         if emails:
             # Lọc email học thuật bằng module dùng chung (đa tầng)

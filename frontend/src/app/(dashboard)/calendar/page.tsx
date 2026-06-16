@@ -99,6 +99,16 @@ export default function CalendarPage() {
               dayHeaderFormat={{ weekday: "short" }}
               eventColor="var(--accent)"
               eventTextColor="var(--text-on-accent)"
+              slotLabelFormat={{
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              }}
+              eventTimeFormat={{
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              }}
             />
           </div>
         )}
