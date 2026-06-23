@@ -105,30 +105,51 @@ class FallbackChatModel:
 
     _cooldowns: dict[str, float] = {}
 
-    def __init__(self, models: list[tuple[str, Any]]) -> None:
-        if not models:
-            raise ValueError("FallbackChatModel requires at least one model.")
-        self._models = models
+    def __init__(
+        self,
+        model_factories: list[tuple[str, Callable[[], Any]]],
+        bound_tools: list[tuple[list[Any], dict[str, Any]]] | None = None,
+        structured_output: tuple[Any, dict[str, Any]] | None = None,
+    ) -> None:
+        if not model_factories:
+            raise ValueError("FallbackChatModel requires at least one model factory.")
+        self._model_factories = model_factories
+        self._bound_tools = bound_tools or []
+        self._structured_output = structured_output
+        self._instances: dict[str, Any] = {}
 
     def __repr__(self) -> str:
-        names = ", ".join(name for name, _ in self._models)
+        names = ", ".join(name for name, _ in self._model_factories)
         return f"FallbackChatModel([{names}])"
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._models[0][1], name)
+    def _get_model_instance(self, name: str, factory: Callable[[], Any]) -> Any:
+        if name not in self._instances:
+            model = factory()
+            for tools, kwargs in self._bound_tools:
+                model = model.bind_tools(tools, **kwargs)
+            if self._structured_output:
+                schema, kwargs = self._structured_output
+                model = model.with_structured_output(schema, **kwargs)
+            self._instances[name] = model
+        return self._instances[name]
 
-    def _ready_models(self) -> list[tuple[str, Any]]:
+    def __getattr__(self, name: str) -> Any:
+        primary_name, primary_factory = self._model_factories[0]
+        primary_instance = self._get_model_instance(primary_name, primary_factory)
+        return getattr(primary_instance, name)
+
+    def _ready_models(self) -> list[tuple[str, Callable[[], Any]]]:
         now = time.monotonic()
-        ready: list[tuple[str, Any]] = []
-        for name, model in self._models:
+        ready: list[tuple[str, Callable[[], Any]]] = []
+        for name, factory in self._model_factories:
             cooldown_until = self._cooldowns.get(name, 0)
             if cooldown_until > now:
                 continue
             self._cooldowns.pop(name, None)
-            ready.append((name, model))
+            ready.append((name, factory))
 
         if ready:
-            if ready[0][0] != self._models[0][0]:
+            if ready[0][0] != self._model_factories[0][0]:
                 logger.info(
                     "LLM fallback: primary model is cooling down; "
                     f"starting with '{ready[0][0]}'."
@@ -138,7 +159,7 @@ class FallbackChatModel:
         logger.warning(
             "LLM fallback: every model is cooling down; retrying primary model."
         )
-        return [self._models[0]]
+        return [self._model_factories[0]]
 
     def _mark_cooldown(self, model_name: str, exc: Exception) -> None:
         delay = _extract_retry_delay_seconds(exc)
@@ -149,10 +170,11 @@ class FallbackChatModel:
     def _call(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         models = self._ready_models()
         last_error: Exception | None = None
-        for index, (model_name, model) in enumerate(models):
+        for index, (model_name, factory) in enumerate(models):
             try:
                 if index > 0:
                     logger.info(f"LLM fallback: trying '{model_name}'.")
+                model = self._get_model_instance(model_name, factory)
                 return getattr(model, method_name)(*args, **kwargs)
             except Exception as exc:
                 last_error = exc
@@ -174,10 +196,11 @@ class FallbackChatModel:
     async def _acall(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         models = self._ready_models()
         last_error: Exception | None = None
-        for index, (model_name, model) in enumerate(models):
+        for index, (model_name, factory) in enumerate(models):
             try:
                 if index > 0:
                     logger.info(f"LLM fallback: trying '{model_name}' async call.")
+                model = self._get_model_instance(model_name, factory)
                 return await getattr(model, method_name)(*args, **kwargs)
             except Exception as exc:
                 last_error = exc
@@ -198,11 +221,12 @@ class FallbackChatModel:
 
     def _stream_call(self, method_name: str, *args: Any, **kwargs: Any):
         models = self._ready_models()
-        for index, (model_name, model) in enumerate(models):
+        for index, (model_name, factory) in enumerate(models):
             yielded = False
             try:
                 if index > 0:
                     logger.info(f"LLM fallback: trying '{model_name}' stream.")
+                model = self._get_model_instance(model_name, factory)
                 for chunk in getattr(model, method_name)(*args, **kwargs):
                     yielded = True
                     yield chunk
@@ -220,11 +244,12 @@ class FallbackChatModel:
 
     async def _astream_call(self, method_name: str, *args: Any, **kwargs: Any):
         models = self._ready_models()
-        for index, (model_name, model) in enumerate(models):
+        for index, (model_name, factory) in enumerate(models):
             yielded = False
             try:
                 if index > 0:
                     logger.info(f"LLM fallback: trying '{model_name}' async stream.")
+                model = self._get_model_instance(model_name, factory)
                 async for chunk in getattr(model, method_name)(*args, **kwargs):
                     yielded = True
                     yield chunk
@@ -260,8 +285,12 @@ class FallbackChatModel:
             yield chunk
 
     def bind_tools(self, tools: list[Any], **kwargs: Any) -> "FallbackChatModel":
+        new_bound = self._bound_tools.copy()
+        new_bound.append((tools, kwargs))
         return FallbackChatModel(
-            [(name, model.bind_tools(tools, **kwargs)) for name, model in self._models]
+            self._model_factories,
+            bound_tools=new_bound,
+            structured_output=self._structured_output,
         )
 
     def with_structured_output(
@@ -270,10 +299,9 @@ class FallbackChatModel:
         **kwargs: Any,
     ) -> "FallbackChatModel":
         return FallbackChatModel(
-            [
-                (name, model.with_structured_output(schema, **kwargs))
-                for name, model in self._models
-            ]
+            self._model_factories,
+            bound_tools=self._bound_tools,
+            structured_output=(schema, kwargs),
         )
 
 
@@ -290,6 +318,7 @@ def _build_gemini_model(model_name: str) -> BaseChatModel:
         model=model_name,
         google_api_key=settings.gemini_api_key,
         temperature=0,
+        max_retries=0, # Disable retries so FallbackChatModel can failover immediately
         # convert_system_message_to_human=True,  # bỏ comment nếu gặp lỗi system message
     )
 
@@ -308,38 +337,43 @@ def _build_gemini() -> Any:
     model_names = _split_model_names(
         ",".join((settings.gemini_model, settings.gemini_fallback_models))
     )
-    models = [(model_name, _build_gemini_model(model_name)) for model_name in model_names]
-    if len(models) == 1:
-        return models[0][1]
+    factories = [(model_name, lambda n=model_name: _build_gemini_model(n)) for model_name in model_names]
 
-    logger.info(
-        "LLMManager: Gemini fallback chain configured: "
-        f"{[model_name for model_name, _ in models]}"
-    )
-    return FallbackChatModel(models)
-
-
-def _build_openai() -> BaseChatModel:
-    """Khởi tạo OpenAI GPT (fallback hoặc tác vụ đặc thù)."""
-    from langchain_openai import ChatOpenAI  # lazy import
-
-    if not settings.openai_api_key:
-        raise ValueError(
-            "OPENAI_API_KEY chưa được cấu hình trong .env. "
-            "Thêm dòng: OPENAI_API_KEY=your_api_key"
+    if len(factories) > 1:
+        logger.info(
+            "LLMManager: Gemini fallback chain configured: "
+            f"{model_names}"
         )
-    return ChatOpenAI(
-        model=settings.openai_model,
-        api_key=settings.openai_api_key,
-        temperature=0,
-    )
+    # Always use FallbackChatModel to benefit from lazy loading, even for a single model
+    return FallbackChatModel(factories)
 
 
-def _build_ollama() -> BaseChatModel:
+def _build_openai() -> Any:
+    """Khởi tạo OpenAI GPT (fallback hoặc tác vụ đặc thù)."""
+    def _factory():
+        from langchain_openai import ChatOpenAI  # lazy import
+
+        if not settings.openai_api_key:
+            raise ValueError(
+                "OPENAI_API_KEY chưa được cấu hình trong .env. "
+                "Thêm dòng: OPENAI_API_KEY=your_api_key"
+            )
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0,
+            max_retries=0, # Disable retries to fail fast
+        )
+    return FallbackChatModel([(settings.openai_model, _factory)])
+
+
+def _build_ollama() -> Any:
     """Khởi tạo Ollama (chạy local, miễn phí hoàn toàn)."""
-    from langchain_ollama import ChatOllama  # lazy import – cần pip install langchain-ollama
+    def _factory():
+        from langchain_ollama import ChatOllama  # lazy import – cần pip install langchain-ollama
 
-    return ChatOllama(model="llama3", temperature=0)
+        return ChatOllama(model="llama3", temperature=0)
+    return FallbackChatModel([("llama3", _factory)])
 
 
 # Map tên provider → hàm factory

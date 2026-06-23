@@ -545,7 +545,7 @@ body {
   --fc-page-bg-color: transparent;
   --fc-neutral-bg-color: var(--bg-elevated);
   --fc-neutral-text-color: var(--text-secondary);
-  --fc-today-bg-color: var(--accent-light);
+  --fc-today-bg-color: hsl(var(--accent-h, 220) 60% 50% / 0.06);
 }
 
 .orca-calendar .fc {
@@ -569,6 +569,124 @@ body {
   text-decoration: none;
 }
 
+/* Event styling – rounded pill shape */
 .orca-calendar .fc-event {
   cursor: pointer;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+  border-width: 0 !important;
+  border-left-width: 3px !important;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
+
+.orca-calendar .fc-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10 !important;
+}
+
+/* Today cell highlight */
+.orca-calendar .fc-day-today {
+  background-color: var(--fc-today-bg-color) !important;
+}
+
+.orca-calendar .fc-day-today .fc-daygrid-day-number {
+  background-color: var(--accent) !important;
+  color: var(--text-on-accent) !important;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+/* Toolbar buttons */
+.orca-calendar .fc-button {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.orca-calendar .fc-button:hover {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--accent) !important;
+}
+
+.orca-calendar .fc-button-active {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: var(--text-on-accent) !important;
+}
+
+.orca-calendar .fc-button-active:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+/* Title */
+.orca-calendar .fc-toolbar-title {
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+}
+
+/* More events link */
+.orca-calendar .fc-daygrid-more-link {
+  color: var(--accent) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500;
+}
+
+/* Time grid now indicator */
+.orca-calendar .fc-timegrid-now-indicator-line {
+  border-color: var(--accent) !important;
+  border-width: 2px !important;
+}
+
+.orca-calendar .fc-timegrid-now-indicator-arrow {
+  border-color: var(--accent) !important;
+}
+
+/* Time grid slots */
+.orca-calendar .fc-timegrid-slot {
+  height: 48px !important;
+}
+
+/* Column header for day/week views */
+.orca-calendar .fc-col-header-cell {
+  padding: 8px 0 !important;
+}
+
+/* Scrollgrid sync */
+.orca-calendar .fc-scrollgrid {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+/* Day grid cell padding */
+.orca-calendar .fc-daygrid-day-frame {
+  min-height: 80px;
+}
+
+/* Responsive: stack sidebar on small screens handled by Tailwind, but 
+   ensure calendar header doesn't overflow */
+@media (max-width: 640px) {
+  .orca-calendar .fc-toolbar {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .orca-calendar .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+  }
+}
+

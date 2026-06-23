@@ -6,9 +6,10 @@ Calendar proxy endpoints:
   - POST /calendar/events  → Create a new event (via AI or direct)
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -35,18 +36,30 @@ class CalendarEvent(BaseModel):
 
 @router.get("/events", response_model=list[CalendarEvent])
 async def get_events(
-    max_results: int = 20,
+    max_results: int = 50,
+    time_min: Optional[str] = Query(None, description="ISO 8601 start of range"),
+    time_max: Optional[str] = Query(None, description="ISO 8601 end of range"),
     current_user: User = Depends(get_current_user),
 ):
     """Get upcoming events from Google Calendar."""
     try:
         from services.google_calendar_service import GoogleCalendarService
-        from datetime import datetime, timedelta, timezone
+
         service = GoogleCalendarService(user_id=current_user.id)
-        now = datetime.now(timezone.utc)
-        end = now + timedelta(days=30)
-        import asyncio
-        events = asyncio.run(service.list_events(start=now, end=end))
+
+        # Parse time range or use defaults (past 30 days → future 60 days)
+        if time_min:
+            start = datetime.fromisoformat(time_min)
+        else:
+            start = datetime.now(timezone.utc) - timedelta(days=30)
+
+        if time_max:
+            end = datetime.fromisoformat(time_max)
+        else:
+            end = datetime.now(timezone.utc) + timedelta(days=60)
+
+        # Await directly – do NOT use asyncio.run() inside async handlers
+        events = await service.list_events(start=start, end=end)
 
         return [
             CalendarEvent(
@@ -60,7 +73,7 @@ async def get_events(
             for e in events[:max_results]
         ]
     except Exception as e:
-        logger.error(f"Calendar API error: {e}")
+        logger.error(f"Calendar API error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Lỗi khi lấy lịch: {str(e)}")
 
 
@@ -71,9 +84,9 @@ async def create_event(
 ):
     """Create a new event in Google Calendar."""
     try:
-        import asyncio
         from services.google_calendar_service import GoogleCalendarService
         from models.calendar import EventCreate, DateTimeTimeZone
+
         service = GoogleCalendarService(user_id=current_user.id)
 
         data = EventCreate(
@@ -83,7 +96,8 @@ async def create_event(
             body=event.description,
             location=event.location,
         )
-        created = asyncio.run(service.create_event(data))
+        # Await directly – do NOT use asyncio.run() inside async handlers
+        created = await service.create_event(data)
 
         return CalendarEvent(
             id=created.id,
@@ -94,5 +108,5 @@ async def create_event(
             description=created.body,
         )
     except Exception as e:
-        logger.error(f"Calendar create error: {e}")
+        logger.error(f"Calendar create error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Lỗi khi tạo sự kiện: {str(e)}")
