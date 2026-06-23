@@ -62,15 +62,17 @@ class NoteAgent:
         builder.add_edge("tools", "reason")
         return builder.compile()
 
-    def run(self, user_message: str) -> str:
+    def run(self, user_message: str, chat_history: list | None = None) -> str:
         from datetime import datetime, timezone
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+        messages = [SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time))]
+        if chat_history:
+            messages.extend(chat_history)
+        messages.append(HumanMessage(content=user_message))
+
         initial_state: NoteAgentState = {
-            "messages": [
-                SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time)),
-                HumanMessage(content=user_message),
-            ],
+            "messages": messages,
             "user_request": user_message,
             "action_result": "",
         }

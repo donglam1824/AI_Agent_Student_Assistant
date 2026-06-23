@@ -203,14 +203,19 @@ async def _stream_chat(
         # Send agent event
         yield f"event: agent\ndata: {json.dumps({'agent': intent})}\n\n"
 
+        # Load conversation history from DB
+        from core.memory_manager import build_history_messages
+        db_messages = crud.get_chat_messages(db, chat_id)
+        chat_history = build_history_messages(db_messages)
+
         # Get response from agent (pass user_id for Google API auth)
         agent = _get_agent(intent, user_id=user_id)
         if agent is None:
             response_text = "Xin lỗi, mình chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn về Lịch học, Ghi chú, Email, Teams hoặc Tài liệu không?"
         elif intent == "docsearch":
-            response_text = _coerce_response_text(agent.run(user_input, source_scope=source_scope))
+            response_text = _coerce_response_text(agent.run(user_input, source_scope=source_scope, chat_history=chat_history))
         else:
-            response_text = _coerce_response_text(agent.run(user_input))
+            response_text = _coerce_response_text(agent.run(user_input, chat_history=chat_history))
 
         # Stream response token by token
         words = response_text.split(" ")

@@ -135,17 +135,21 @@ class DocSearchAgent:
         response = llm.invoke(prompt)
         return coerce_message_content(response.content) if hasattr(response, "content") else str(response)
 
-    def run(self, user_message: str, source_scope: dict | None = None) -> str:
+    def run(self, user_message: str, source_scope: dict | None = None, chat_history: list | None = None) -> str:
         from datetime import datetime, timezone
         if source_scope and source_scope.get("mode") != "all":
             return self._run_scoped_search(user_message, source_scope)
 
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        
+        # Build message list: system + history + current user message
+        messages = [SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time))]
+        if chat_history:
+            messages.extend(chat_history)
+        messages.append(HumanMessage(content=user_message))
+        
         initial_state: DocSearchAgentState = {
-            "messages": [
-                SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time)),
-                HumanMessage(content=user_message),
-            ],
+            "messages": messages,
             "user_request": user_message,
             "action_result": "",
         }
