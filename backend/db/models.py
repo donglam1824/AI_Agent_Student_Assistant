@@ -1,8 +1,5 @@
 """
-db/models.py
-------------
-SQLAlchemy ORM models for ORCA application.
-Tables: users, chats, chat_messages, documents, notes
+Các ORM Model SQLAlchemy cho ứng dụng ORCA.
 """
 
 import uuid
@@ -30,7 +27,7 @@ class User(Base):
     id = Column(String, primary_key=True, default=_uuid)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=True)
-    picture = Column(String, nullable=True)  # Google avatar URL
+    picture = Column(String, nullable=True)  # URL avatar
     google_access_token = Column(Text, nullable=True)
     google_refresh_token = Column(Text, nullable=True)
     microsoft_access_token = Column(Text, nullable=True)
@@ -40,10 +37,8 @@ class User(Base):
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
-    # Relationships
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
-
     email_summaries = relationship("EmailSummary", back_populates="user", cascade="all, delete-orphan")
     email_preference = relationship("EmailPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
@@ -58,7 +53,6 @@ class Chat(Base):
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
-    # Relationships
     user = relationship("User", back_populates="chats")
     messages = relationship("ChatMessage", back_populates="chat", cascade="all, delete-orphan", order_by="ChatMessage.created_at")
 
@@ -74,7 +68,6 @@ class ChatMessage(Base):
     source_scope = Column(Text, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
-    # Relationships
     chat = relationship("Chat", back_populates="messages")
 
 
@@ -86,17 +79,17 @@ class Document(Base):
     filename = Column(String, nullable=False)
     file_type = Column(String, nullable=False)  # "pdf" | "docx" | "pptx" | "txt"
     file_size = Column(Integer, nullable=False)  # bytes
-    content_hash = Column(String, nullable=True, index=True)  # sha256 of uploaded/downloaded content
+    content_hash = Column(String, nullable=True, index=True)  # sha256 của content
     chunk_count = Column(Integer, default=0)
     status = Column(String, default="processing")  # "processing" | "ready" | "error"
     error_message = Column(Text, nullable=True)
     
-    # Topic classification fields
-    topic = Column(String, nullable=True)       # "Toán cao cấp"
-    category = Column(String, nullable=True)    # "Toán"  
+    # Phân loại chủ đề
+    topic = Column(String, nullable=True)
+    category = Column(String, nullable=True)
     tags = Column(Text, nullable=True)          # JSON array string: '["đại số", "ma trận"]'
     
-    # Cloud source fields (if imported from Drive/OneDrive)
+    # Nguồn cloud (Drive/OneDrive)
     source_type = Column(String, default="manual_upload") # "manual_upload" | "google_drive" | "onedrive"
     drive_file_id = Column(String, nullable=True)
     drive_modified_time = Column(String, nullable=True)
@@ -104,11 +97,7 @@ class Document(Base):
     
     created_at = Column(DateTime, default=_utcnow)
 
-    # Relationships
     user = relationship("User", back_populates="documents")
-
-
-
 
 
 class EmailSummary(Base):
@@ -131,7 +120,6 @@ class EmailSummary(Base):
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=_utcnow)
 
-    # Relationships
     user = relationship("User", back_populates="email_summaries")
 
 
@@ -146,5 +134,4 @@ class EmailPreference(Base):
     last_scan_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
-    # Relationships
     user = relationship("User", back_populates="email_preference")

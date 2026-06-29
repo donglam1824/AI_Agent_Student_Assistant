@@ -1,15 +1,6 @@
 """
-services/graph_calendar_service.py
------------------------------------
-Abstraction over Microsoft Graph Calendar API.
-
-Two implementations:
-  - GraphCalendarService  → real Microsoft Graph calls (async)
-  - MockCalendarService   → in-memory fake for local dev/testing
-
-The agent/tools layer should only depend on the abstract interface.
+Interface và mock/real service kết nối Microsoft Graph Calendar API.
 """
-
 from __future__ import annotations
 
 import uuid
@@ -20,10 +11,6 @@ from typing import List
 from models.calendar import CalendarEvent, DateTimeTimeZone, EventCreate, EventUpdate
 from core.logger import logger
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Abstract interface
-# ─────────────────────────────────────────────────────────────────────────────
 
 class BaseCalendarService(ABC):
     @abstractmethod
@@ -39,16 +26,12 @@ class BaseCalendarService(ABC):
     async def delete_event(self, event_id: str) -> bool: ...
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Mock implementation (no credentials needed)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class MockCalendarService(BaseCalendarService):
-    """In-memory calendar service for development and testing."""
+    """Service lịch học in-memory để dev/testing"""
 
     def __init__(self) -> None:
         self._store: dict[str, CalendarEvent] = {}
-        # Seed a couple of fake events
+        # Seed dữ liệu mẫu
         self._seed()
 
     def _seed(self) -> None:
@@ -112,15 +95,7 @@ class MockCalendarService(BaseCalendarService):
         return True
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Real Microsoft Graph implementation
-# ─────────────────────────────────────────────────────────────────────────────
-
 class GraphCalendarService(BaseCalendarService):
-    """
-    Real implementation using Microsoft Graph SDK.
-    Requires valid Azure credentials in settings.
-    """
 
     def __init__(self) -> None:
         from core.auth import get_graph_client
@@ -202,19 +177,8 @@ class GraphCalendarService(BaseCalendarService):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Factory
-# ─────────────────────────────────────────────────────────────────────────────
-
 def get_calendar_service() -> BaseCalendarService:
-    """
-    Factory: returns the correct calendar service based on settings.calendar_provider.
-
-    CALENDAR_PROVIDER values:
-      "mock"     → MockCalendarService (in-memory, no credentials needed)
-      "google"   → GoogleCalendarService (Google Calendar via OAuth2)
-      "msgraph"  → GraphCalendarService (Microsoft 365 via Azure)
-    """
+    """Factory lấy service calendar dựa trên settings.calendar_provider"""
     from config.settings import settings
 
     provider = settings.calendar_provider.lower().strip()

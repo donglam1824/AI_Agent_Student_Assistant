@@ -63,10 +63,7 @@ def update_user_tokens(
     access_token: str,
     refresh_token: Optional[str] = None,
 ) -> Optional[User]:
-    """
-    Cập nhật Google tokens đã mã hóa vào DB.
-    Chỉ cập nhật refresh_token nếu được cung cấp (Google không luôn trả về mới).
-    """
+    """Cập nhật Google token (chỉ cập nhật refresh_token nếu có)"""
     from core.crypto import encrypt_token
     user = get_user_by_id(db, user_id)
     if not user:
@@ -87,7 +84,7 @@ def update_user_microsoft_tokens(
     expires_at: Optional[datetime] = None,
     account_email: Optional[str] = None,
 ) -> Optional[User]:
-    """Update encrypted Microsoft OAuth tokens for a user."""
+    """Cập nhật Microsoft OAuth token mã hóa"""
     from core.crypto import encrypt_token
 
     user = get_user_by_id(db, user_id)
@@ -106,7 +103,7 @@ def update_user_microsoft_tokens(
 
 
 def disconnect_user_microsoft(db: Session, user_id: str) -> Optional[User]:
-    """Remove Microsoft OAuth tokens from a user."""
+    """Xóa Microsoft OAuth token của user"""
     user = get_user_by_id(db, user_id)
     if not user:
         return None
@@ -179,7 +176,7 @@ def add_message(
         source_scope=source_scope,
     )
     db.add(msg)
-    # Update the chat's updated_at timestamp
+    # Cập nhật lại thời gian updated_at của chat
     chat = get_chat_by_id(db, chat_id)
     if chat:
         from datetime import datetime, timezone
@@ -303,10 +300,7 @@ def get_documents_by_category(db: Session, user_id: str, category: str) -> list[
 
 
 def get_topic_summary(db: Session, user_id: str) -> list[dict]:
-    """
-    Trả về thống kê số lượng tài liệu theo category và danh sách các topic đi kèm.
-    [{category: "Toán", count: 5, topics: ["Toán cao cấp", "Giải tích 1"]}, ...]
-    """
+    """Thống kê số tài liệu theo category và topic"""
     import json
     docs = db.query(Document).filter(Document.user_id == user_id).all()
     
@@ -382,7 +376,7 @@ def update_email_summary_calendar_event(db: Session, summary_id: str, event_id: 
 def get_email_preference(db: Session, user_id: str) -> Optional[EmailPreference]:
     pref = db.query(EmailPreference).filter(EmailPreference.user_id == user_id).first()
     if not pref:
-        # Create default preference if not exists
+        # Tạo cấu hình mặc định nếu chưa tồn tại
         pref = EmailPreference(user_id=user_id)
         db.add(pref)
         db.commit()

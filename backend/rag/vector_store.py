@@ -1,8 +1,5 @@
 """
-rag/vector_store.py
--------------------
-ChromaDB vector store operations.
-Lưu dữ liệu tại: data/chroma_db/ (persistent local)
+Thao tác vector store sử dụng ChromaDB.
 """
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -14,12 +11,11 @@ from langchain_core.documents import Document
 from rag.embeddings import get_embedding_collection_name, get_embeddings
 from core.logger import logger
 
-# Đường dẫn lưu ChromaDB
 CHROMA_DIR = Path(__file__).parent.parent / "data" / "chroma_db"
 
 
 def _open_collection_without_embeddings() -> Chroma:
-    """Open the current Chroma collection without loading the embedding model."""
+    """Mở Chroma collection mà không load model embedding (tránh tốn tài nguyên)"""
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
     collection_name = get_embedding_collection_name()
     return Chroma(
@@ -29,7 +25,7 @@ def _open_collection_without_embeddings() -> Chroma:
 
 
 class VectorStore:
-    """Quản lý ChromaDB collection cho tài liệu sinh viên."""
+    """Quản lý ChromaDB collection"""
 
     def __init__(self):
         CHROMA_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,7 +38,7 @@ class VectorStore:
         logger.info(f"VectorStore: collection={collection_name}, dir={CHROMA_DIR}")
 
     def add_documents(self, documents: List[Document]) -> int:
-        """Thêm chunks vào ChromaDB. Trả về số chunks đã thêm."""
+        """Lưu document chunks vào ChromaDB"""
         if not documents:
             return 0
         self._db.add_documents(documents)
@@ -50,7 +46,7 @@ class VectorStore:
         return len(documents)
 
     def delete_by_metadata(self, where: Dict[str, Any]) -> None:
-        """Delete chunks matching a Chroma metadata filter."""
+        """Xóa chunks theo bộ lọc metadata"""
         if not where:
             return
         self._db._collection.delete(where=where)
@@ -59,12 +55,7 @@ class VectorStore:
     def similarity_search_with_score(
         self, query: str, k: int = 5, filter: Optional[Dict[str, Any]] = None
     ) -> List[tuple[Document, float]]:
-        """
-        Tìm k chunks có độ liên quan nhất với query (kèm theo điểm relevance score).
-        Hỗ trợ filter theo metadata (vd filter = {"source": "file_name"}).
-        Lưu ý: score mà ChromaDB trả về là distance (càng nhỏ càng giống).
-        Do Langchain đã map thành relevance_score (càng gần 1 càng giống).
-        """
+        """Tìm k chunks liên quan nhất kèm relevance score (filter theo metadata)"""
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -82,7 +73,7 @@ class VectorStore:
         filter: Optional[Dict[str, Any]] = None,
         limit: int = 1000,
     ) -> List[Document]:
-        """Return stored chunks for local lexical reranking/fallback."""
+        """Lấy các chunk đã lưu để phục vụ rerank/fallback"""
         kwargs: Dict[str, Any] = {
             "include": ["documents", "metadatas"],
             "limit": limit,
@@ -104,7 +95,6 @@ class VectorStore:
         return docs
 
     def count(self) -> int:
-        """Số chunks hiện có trong collection."""
         return self._db._collection.count()
 
 
@@ -119,7 +109,7 @@ def get_vector_store() -> VectorStore:
 
 
 def delete_vectors_by_metadata(where: Dict[str, Any]) -> None:
-    """Delete chunks without initializing local/API embedding providers."""
+    """Xóa chunks trực tiếp (không khởi tạo model embedding)"""
     if not where:
         return
     db = _open_collection_without_embeddings()

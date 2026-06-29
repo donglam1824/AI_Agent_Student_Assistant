@@ -1,13 +1,6 @@
 """
-services/google_calendar_service.py
-------------------------------------
-Google Calendar API implementation – multi-tenant, token từ Database.
-
-Mỗi request, service nhận user_id, truy vấn DB để lấy token đã mã hóa,
-giải mã và dùng để gọi Google Calendar API. Nếu token hết hạn, tự refresh
-và lưu lại token mới vào DB.
+Service kết nối Google Calendar API (đa người dùng, lấy token từ DB).
 """
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -29,10 +22,7 @@ DEFAULT_TZ = "Asia/Ho_Chi_Minh"
 
 
 def _get_credentials_from_db(user_id: str) -> Credentials:
-    """
-    Truy vấn DB lấy token đã mã hóa của user, giải mã và tạo Credentials.
-    Tự động refresh nếu hết hạn và lưu token mới vào DB.
-    """
+    """Giải mã và khởi tạo Credentials từ DB, tự động làm mới nếu hết hạn"""
     from db.database import SessionLocal
     from db import crud
     from core.crypto import decrypt_token
@@ -61,11 +51,11 @@ def _get_credentials_from_db(user_id: str) -> Credentials:
             scopes=SCOPES,
         )
 
-        # Refresh nếu hết hạn
+        # Làm mới token nếu hết hạn
         if not creds.valid and creds.refresh_token:
             logger.info(f"[Google Calendar] Refreshing token for user={user_id}")
             creds.refresh(Request())
-            # Lưu token mới vào DB
+            # Cập nhật token mới vào DB
             crud.update_user_tokens(
                 db=db,
                 user_id=user_id,
@@ -80,9 +70,6 @@ def _get_credentials_from_db(user_id: str) -> Credentials:
 
 
 class GoogleCalendarService(BaseCalendarService):
-    """
-    Google Calendar implementation – đa người dùng, token từ Database.
-    """
 
     def __init__(self, user_id: str) -> None:
         from config.settings import settings
@@ -92,11 +79,9 @@ class GoogleCalendarService(BaseCalendarService):
         self._user_id = user_id
         logger.info(f"[Google Calendar] Service ready for user={user_id}")
 
-    # ── Helpers ────────────────────────────────────────────────────────────
-
     @staticmethod
     def _to_rfc3339(dt_str: str, tz: str = DEFAULT_TZ) -> str:
-        """Chuyển 'YYYY-MM-DDTHH:MM:SS' sang RFC3339 với timezone offset."""
+        """Định dạng thời gian sang RFC3339 có offset timezone"""
         import pytz
         naive = datetime.fromisoformat(dt_str)
         local_tz = pytz.timezone(tz)
@@ -105,7 +90,7 @@ class GoogleCalendarService(BaseCalendarService):
 
     @staticmethod
     def _from_google_event(g: dict) -> CalendarEvent:
-        """Map Google API event dict → CalendarEvent model."""
+        """Chuyển đổi Google API dict sang CalendarEvent model"""
         start = g.get("start", {})
         end = g.get("end", {})
         start_dt = start.get("dateTime", start.get("date", ""))
@@ -122,8 +107,6 @@ class GoogleCalendarService(BaseCalendarService):
             is_online_meeting=bool(g.get("conferenceData")),
             web_link=g.get("htmlLink"),
         )
-
-    # ── CRUD ───────────────────────────────────────────────────────────────
 
     async def list_events(self, start: datetime, end: datetime) -> List[CalendarEvent]:
         logger.info(f"[Google Calendar] user={self._user_id} listing events {start.isoformat()} → {end.isoformat()}")

@@ -1,15 +1,6 @@
 """
-services/academic_filter.py
-----------------------------
-Bộ lọc email học thuật đa tầng, dùng chung cho cả scheduler và chat tools.
-
-Phân loại email qua 4 tầng:
-  1. Domain trường đại học
-  2. Subdomain LMS / học vụ
-  3. Từ khóa trong sender
-  4. Từ khóa trong subject / body (bonus signal)
+Bộ lọc email học thuật đa tầng kết hợp domain, subdomain và từ khóa.
 """
-
 from __future__ import annotations
 
 import json
@@ -18,8 +9,6 @@ from typing import Optional
 
 from core.logger import logger
 from models.email import EmailMessage
-
-# ── Tầng 1: Domain trường đại học mặc định ──────────────────────────────
 
 DEFAULT_ACADEMIC_DOMAINS: list[str] = [
     "@edu.vn",
@@ -38,8 +27,6 @@ DEFAULT_ACADEMIC_DOMAINS: list[str] = [
     "@rmit.edu.vn",
 ]
 
-# ── Tầng 2: Subdomain patterns (LMS, học vụ, khoa) ─────────────────────
-
 ACADEMIC_SUBDOMAIN_PATTERNS: list[str] = [
     r"lms\.",
     r"elearning\.",
@@ -51,13 +38,10 @@ ACADEMIC_SUBDOMAIN_PATTERNS: list[str] = [
     r"fit\.",
     r"blackboard\.",
     r"classroom\.",
-    # Also match common LMS platforms directly
     r"canvas\.instructure\.com",
     r"coursera\.org",
     r"edx\.org",
 ]
-
-# ── Tầng 3: Từ khóa trong sender ────────────────────────────────────────
 
 ACADEMIC_SENDER_KEYWORDS: list[str] = [
     "thầy", "cô", "teacher", "professor", "prof.",
@@ -67,8 +51,6 @@ ACADEMIC_SENDER_KEYWORDS: list[str] = [
     "academic", "dean", "registrar",
     "noreply@lms", "noreply@elearning",
 ]
-
-# ── Tầng 4: Từ khóa trong subject / body ────────────────────────────────
 
 ACADEMIC_CONTENT_KEYWORDS_VI: list[str] = [
     "lịch học", "lich hoc",
@@ -103,17 +85,15 @@ ACADEMIC_CONTENT_KEYWORDS_EN: list[str] = [
 ALL_CONTENT_KEYWORDS = ACADEMIC_CONTENT_KEYWORDS_VI + ACADEMIC_CONTENT_KEYWORDS_EN
 
 
-# ── Classification logic ────────────────────────────────────────────────
-
 def _extract_email_address(sender: str) -> str:
-    """Trích xuất địa chỉ email thuần từ chuỗi sender, vd 'Name <a@b.com>' → 'a@b.com'."""
+    """Trích xuất email từ chuỗi sender"""
     if "<" in sender and ">" in sender:
         return sender.split("<")[1].split(">")[0].lower()
     return sender.lower().strip()
 
 
 def _match_domain(email_addr: str, domains: list[str]) -> bool:
-    """Kiểm tra email address có thuộc domain nào trong danh sách."""
+    """Kiểm tra email thuộc list domain"""
     for domain in domains:
         if email_addr.endswith(domain.lower()):
             return True
@@ -121,7 +101,7 @@ def _match_domain(email_addr: str, domains: list[str]) -> bool:
 
 
 def _match_subdomain_pattern(email_addr: str) -> bool:
-    """Kiểm tra email address hoặc sender có chứa subdomain pattern học thuật."""
+    """Kiểm tra email chứa subdomain học thuật"""
     for pattern in ACADEMIC_SUBDOMAIN_PATTERNS:
         if re.search(pattern, email_addr, re.IGNORECASE):
             return True
@@ -129,7 +109,7 @@ def _match_subdomain_pattern(email_addr: str) -> bool:
 
 
 def _match_sender_keywords(sender: str) -> bool:
-    """Kiểm tra chuỗi sender (bao gồm tên hiển thị) có chứa từ khóa học thuật."""
+    """Kiểm tra tên hiển thị chứa từ khóa học thuật"""
     sender_lower = sender.lower()
     for keyword in ACADEMIC_SENDER_KEYWORDS:
         if keyword in sender_lower:
@@ -138,7 +118,7 @@ def _match_sender_keywords(sender: str) -> bool:
 
 
 def _match_content_keywords(subject: str, body_preview: str) -> bool:
-    """Kiểm tra subject hoặc body preview có chứa từ khóa học thuật."""
+    """Kiểm tra tiêu đề/nội dung chứa từ khóa học thuật"""
     text = (subject + " " + body_preview).lower()
     for keyword in ALL_CONTENT_KEYWORDS:
         if keyword in text:
@@ -151,40 +131,25 @@ def classify_email(
     user_domains: list[str] | None = None,
     user_keywords: list[str] | None = None,
 ) -> str:
-    """
-    Phân loại một email thành 3 mức:
-      - 'academic':        Chắc chắn là email học thuật (match domain/subdomain/sender)
-      - 'likely_academic':  Có thể là email học thuật (match content keywords)
-      - 'non_academic':    Không phải email học thuật
-
-    Args:
-        email: EmailMessage object.
-        user_domains: Danh sách domain tùy chỉnh của user (ngoài default).
-        user_keywords: Danh sách keyword tùy chỉnh của user.
-    """
+    """Phân loại email thành: academic, likely_academic, hoặc non_academic"""
     sender_raw = email.sender or ""
     email_addr = _extract_email_address(sender_raw)
     subject = email.subject or ""
     body_preview = email.body_preview or ""
 
-    # Merge user custom domains với default
     all_domains = list(DEFAULT_ACADEMIC_DOMAINS)
     if user_domains:
         all_domains.extend(user_domains)
 
-    # Tầng 1: Domain trường đại học
     if _match_domain(email_addr, all_domains):
         return "academic"
 
-    # Tầng 2: Subdomain patterns (lms.*, elearning.*, canvas.*, ...)
     if _match_subdomain_pattern(email_addr):
         return "academic"
 
-    # Tầng 3: Từ khóa trong sender
     if _match_sender_keywords(sender_raw):
         return "academic"
 
-    # Tầng 4: Từ khóa trong subject / body (bonus signal)
     all_keywords = list(ALL_CONTENT_KEYWORDS)
     if user_keywords:
         all_keywords.extend(user_keywords)
@@ -201,13 +166,7 @@ def filter_academic_emails(
     emails: list[EmailMessage],
     user_id: str | None = None,
 ) -> tuple[list[EmailMessage], list[EmailMessage]]:
-    """
-    Lọc danh sách email thành 2 nhóm: học thuật và không học thuật.
-    Email 'likely_academic' được gộp vào nhóm học thuật.
-
-    Returns:
-        (academic_emails, non_academic_emails)
-    """
+    """Lọc danh sách email thành 2 nhóm: học thuật và không học thuật"""
     user_domains, user_keywords = _get_user_academic_config(user_id)
 
     academic: list[EmailMessage] = []
@@ -231,10 +190,7 @@ def filter_academic_emails(
 def _get_user_academic_config(
     user_id: str | None,
 ) -> tuple[list[str], list[str]]:
-    """
-    Lấy danh sách domain và keyword tùy chỉnh từ EmailPreference.
-    Trả về (custom_domains, custom_keywords).
-    """
+    """Lấy domain và keyword tùy chỉnh từ cấu hình của user"""
     if not user_id:
         return [], []
 

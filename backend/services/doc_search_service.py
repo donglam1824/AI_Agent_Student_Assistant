@@ -1,12 +1,5 @@
 """
-services/doc_search_service.py
--------------------------------
-DocSearchService: orchestrate upload và search,
-quản lý metadata tài liệu trong SQLite thông qua SQLAlchemy.
-
-Hỗ trợ 2 nguồn tài liệu:
-  1. Manual upload (PDF, DOCX, PPTX, TXT từ giao diện web)
-  2. Google Drive & OneDrive (import file đã chọn hoặc sync lại)
+Service quản lý việc upload, tìm kiếm tài liệu và đồng bộ metadata từ các nguồn (local, Drive, OneDrive)
 """
 from datetime import datetime
 from pathlib import Path
@@ -32,13 +25,11 @@ SOURCE_ONEDRIVE = "onedrive"
 
 
 class DocSearchService:
-    """Upload tài liệu + tìm kiếm ngữ nghĩa (có bộ lọc) + metadata management."""
+    """Quản lý upload, tìm kiếm tài liệu và metadata"""
 
     def __init__(self):
         self._loader = DocumentLoader()
-        # Local sentence-transformer relevance scores are conservative for short
-        # Vietnamese concept questions, so keep the cutoff below the observed
-        # boundary where relevant chunks were being dropped.
+        # Ngưỡng relevance score thấp (0.2) cho sentence-transformers tiếng Việt
         self._retriever = Retriever(k=8, score_threshold=0.2)
 
     def _metadata_filter_for_scope(
@@ -103,7 +94,7 @@ class DocSearchService:
 
         return None
 
-    # ── Compatibility methods (No-ops or empty since we migrated to SQLAlchemy) ──
+    # Tương thích ngược sau khi đổi sang SQLAlchemy
     def _init_db(self):
         pass
 
@@ -130,7 +121,7 @@ class DocSearchService:
     ) -> str:
         db = SessionLocal()
         try:
-            # Check if doc metadata already exists (e.g. for re-sync/overwrite)
+            # Kiểm tra xem metadata của file đã tồn tại chưa
             doc = None
             if drive_file_id:
                 doc = db.query(Document).filter(
@@ -182,7 +173,7 @@ class DocSearchService:
         user_id: Optional[str] = None,
         source_type: Optional[str] = None,
     ):
-        """Xóa record metadata theo drive_file_id (dùng khi re-sync)."""
+        """Xóa metadata theo file ID nguồn (dùng khi re-sync)"""
         db = SessionLocal()
         try:
             query = db.query(Document).filter(Document.drive_file_id == drive_file_id)
@@ -225,7 +216,7 @@ class DocSearchService:
         source_type: str,
         source_id: Optional[str] = None,
     ) -> None:
-        """Update Markdown wiki and add contextual retrieval text to chunks."""
+        """Cập nhật wiki markdown và bổ sung context vào chunk"""
         if not user_id:
             return
 
@@ -257,7 +248,7 @@ class DocSearchService:
             logger.error(f"DocSearchService wiki update error for {document_key}: {e}")
 
     def list_documents(self, user_id: Optional[str] = None) -> List[Dict]:
-        """Trả về danh sách tài liệu đã upload (cả manual và Drive/OneDrive)."""
+        """Lấy danh sách tất cả tài liệu"""
         db = SessionLocal()
         try:
             query = db.query(Document)
@@ -287,7 +278,7 @@ class DocSearchService:
         user_id: Optional[str] = None,
         source_type: Optional[str] = None,
     ) -> Optional[Dict]:
-        """Lấy metadata của document theo drive_file_id."""
+        """Lấy metadata document theo drive_file_id"""
         db = SessionLocal()
         try:
             query = db.query(Document).filter(Document.drive_file_id == drive_file_id)
@@ -313,7 +304,7 @@ class DocSearchService:
     # ── Core operations: Manual Upload ─────────────────────────────
 
     def upload(self, file_path: str, user_id: Optional[str] = None) -> str:
-        """Load file → embed → lưu vào ChromaDB + SQLite."""
+        """Nạp tài liệu: load -> embed -> lưu ChromaDB và DB"""
         path = Path(file_path)
         logger.info(f"DocSearchService.upload: {path.name}")
         content_hash = self._hash_file(path)
@@ -418,9 +409,7 @@ class DocSearchService:
         refresh_token: str = "",
         user_id: Optional[str] = None,
     ) -> List[Dict]:
-        """
-        Import danh sách file từ Google Drive vào RAG.
-        """
+        """Import danh sách file từ Google Drive vào RAG"""
         from services.google_drive_service import GoogleDriveService
 
         drive_svc = GoogleDriveService(
@@ -434,8 +423,6 @@ class DocSearchService:
         for file_id in file_ids:
             result = {"file_id": file_id, "file_name": "", "status": "error", "num_chunks": 0, "error": None}
             try:
-                # Lấy metadata
-                meta = drive_svc.get_file_metadata(file_id)
                 file_name = meta.get("name", file_id)
                 mime_type = meta.get("mimeType", "")
                 modified_time = meta.get("modifiedTime", "")
@@ -444,8 +431,6 @@ class DocSearchService:
 
                 logger.info(f"DocSearchService.import_from_drive: processing '{file_name}' ({mime_type})")
 
-                # Lấy nội dung
-                from services.google_drive_service import DriveFile
                 drive_file = DriveFile(
                     id=file_id,
                     name=file_name,
@@ -455,11 +440,11 @@ class DocSearchService:
                 ext, content_bytes = drive_svc.get_file_content(drive_file)
                 content_hash = self._hash_bytes(content_bytes)
 
-                # Cập nhật size nếu export Google Docs
+                # Cập nhật size khi xuất Google Docs
                 if not file_size and content_bytes:
                     file_size = len(content_bytes)
 
-                # Build temp metadata cho chunk loader
+                # Khởi tạo metadata tạm
                 temp_metadata = {
                     "source": file_name,
                     "source_type": SOURCE_DRIVE,
@@ -471,7 +456,6 @@ class DocSearchService:
                 if user_id:
                     temp_metadata["user_id"] = user_id
 
-                # Chunk theo loại file
                 if ext in (".txt", ".csv"):
                     text = content_bytes.decode("utf-8", errors="ignore")
                     chunks = self._loader.load_from_text(text, temp_metadata)
@@ -483,7 +467,7 @@ class DocSearchService:
                     results.append(result)
                     continue
 
-                # Phân loại chủ đề bằng Gemini
+                # Phân loại chủ đề bằng LLM
                 text_sample = "\n".join([c.page_content for c in chunks[:2]])
                 classification = TopicClassifier.classify(text_sample)
                 topic = classification["topic"]
@@ -491,7 +475,7 @@ class DocSearchService:
                 tags_list = classification["tags"]
                 tags_str = json.dumps(tags_list, ensure_ascii=False)
 
-                # Thêm topic/category/tags vào chunk metadata thực tế cho ChromaDB
+                # Ghi nhận phân loại vào metadata của ChromaDB
                 for chunk in chunks:
                     chunk.metadata.update({
                         "topic": topic,
@@ -499,7 +483,7 @@ class DocSearchService:
                         "tags": tags_str
                     })
 
-                # Xóa chunks cũ nếu đã import trước đó (re-import)
+                # Xóa chunks cũ nếu là re-import
                 self._update_wiki_for_chunks(
                     user_id=user_id,
                     document_key=f"{SOURCE_DRIVE}:{file_id}",
@@ -518,12 +502,11 @@ class DocSearchService:
                 store.delete_by_metadata(delete_filter)
                 self._delete_metadata_by_drive_id(file_id, user_id=user_id, source_type=SOURCE_DRIVE)
 
-                # Lưu vào ChromaDB
                 prepare_chunks_for_index(chunks)
                 store.add_documents(chunks)
                 num_chunks = len(chunks)
 
-                # Lưu metadata SQLite trong orca.db
+                # Lưu metadata vào DB
                 self._save_metadata(
                     file_name=file_name,
                     file_path=f"google_drive:{file_id}",
@@ -558,9 +541,7 @@ class DocSearchService:
         refresh_token: str = "",
         user_id: Optional[str] = None,
     ) -> Dict:
-        """
-        Re-sync một file Drive đã import (kiểm tra modifiedTime trước).
-        """
+        """Đồng bộ lại file Drive (chỉ sync nếu modifiedTime thay đổi)"""
         from services.google_drive_service import GoogleDriveService
 
         drive_svc = GoogleDriveService(
@@ -572,7 +553,6 @@ class DocSearchService:
             meta = drive_svc.get_file_metadata(file_id)
             current_modified = meta.get("modifiedTime", "")
 
-            # So sánh với version đã lưu
             existing = self.get_drive_document(file_id, user_id=user_id, source_type=SOURCE_DRIVE)
             if existing and existing.get("drive_modified_time") == current_modified:
                 return {
@@ -581,7 +561,6 @@ class DocSearchService:
                     "message": f"File '{existing['file_name']}' chưa thay đổi, không cần sync lại.",
                 }
 
-            # Re-import
             results = self.import_from_drive([file_id], access_token, refresh_token, user_id=user_id)
             r = results[0]
             if r["status"] == "success":
@@ -605,7 +584,7 @@ class DocSearchService:
         access_token: str,
         user_id: Optional[str] = None,
     ) -> List[Dict]:
-        """Import selected OneDrive files into RAG."""
+        """Import danh sách file từ OneDrive vào RAG"""
         from services.onedrive_service import OneDriveFile, OneDriveService
 
         drive_svc = OneDriveService(access_token=access_token)
@@ -634,7 +613,7 @@ class DocSearchService:
                 ext, content_bytes = drive_svc.get_file_content(drive_file)
                 content_hash = self._hash_bytes(content_bytes)
 
-                # Temp metadata for chunk loader
+                # Khởi tạo metadata tạm
                 temp_metadata = {
                     "source": file_name,
                     "source_type": SOURCE_ONEDRIVE,
@@ -665,7 +644,7 @@ class DocSearchService:
                 tags_list = classification["tags"]
                 tags_str = json.dumps(tags_list, ensure_ascii=False)
 
-                # Thêm topic/category/tags vào chunk metadata thực tế cho ChromaDB
+                # Ghi nhận phân loại vào metadata của ChromaDB
                 for chunk in chunks:
                     chunk.metadata.update({
                         "topic": topic,
@@ -728,7 +707,7 @@ class DocSearchService:
         access_token: str,
         user_id: Optional[str] = None,
     ) -> Dict:
-        """Re-sync a OneDrive file if its modified time changed."""
+        """Đồng bộ lại file OneDrive nếu modifiedTime thay đổi"""
         from services.onedrive_service import OneDriveService
 
         drive_svc = OneDriveService(access_token=access_token)
@@ -766,7 +745,7 @@ class DocSearchService:
         user_id: Optional[str] = None,
         source_scope: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Tìm kiếm tài liệu liên quan và trả về context."""
+        """Tìm kiếm tài liệu liên quan và trả về context"""
         metadata_filter = self._metadata_filter_for_scope(source_scope, user_id)
         scoped_document_name = None if metadata_filter else document_name
         docs = self._retriever.retrieve(

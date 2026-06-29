@@ -1,7 +1,4 @@
-/**
- * components/sidebar/AppSidebar.tsx
- * Main navigation sidebar – collapsible with icon-only mode.
- */
+/** Sidebar điều hướng chính của ứng dụng */
 
 "use client";
 
@@ -42,7 +39,7 @@ export function AppSidebar() {
         sidebarOpen ? "w-60" : "w-16"
       )}
     >
-      {/* Logo */}
+
       <div className="h-14 flex items-center px-4 border-b border-border">
         <Link href="/chat" className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0">
@@ -66,7 +63,7 @@ export function AppSidebar() {
         )}
       </div>
 
-      {/* Navigation */}
+
       <nav className="flex-1 py-3 px-2 space-y-1">
         {NAV_ITEMS.map(({ href, icon: Icon, label, id }) => {
           const isActive = pathname === href || pathname?.startsWith(href + "/");
@@ -94,7 +91,7 @@ export function AppSidebar() {
                   : "text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
               )}
             >
-              {/* Active indicator bar */}
+
               {isActive && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-accent rounded-r" />
               )}
@@ -105,7 +102,7 @@ export function AppSidebar() {
                 </span>
               )}
 
-              {/* Tooltip when collapsed */}
+
               {!sidebarOpen && (
                 <div
                   className={cn(
@@ -124,7 +121,7 @@ export function AppSidebar() {
         })}
       </nav>
 
-      {/* User footer */}
+
       {user && sidebarOpen && (
         <div className="p-3 border-t border-border animate-fade-in">
           <div className="flex items-center gap-2 px-2">

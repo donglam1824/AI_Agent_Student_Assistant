@@ -1,18 +1,5 @@
 """
-services/google_drive_service.py
----------------------------------
-GoogleDriveService: kết nối Google Drive API để:
-  - Liệt kê thư mục và file của người dùng
-  - Export Google Docs/Sheets/Slides sang text
-  - Download file thông thường (PDF, DOCX, PPTX, TXT)
-  - Lấy metadata file (name, modifiedTime, size)
-
-Hỗ trợ MIME types:
-  - Google Docs      → export text/plain
-  - Google Sheets    → export text/csv
-  - Google Slides    → export text/plain
-  - PDF, DOCX, PPTX, TXT → download trực tiếp
-  - Khác             → bỏ qua
+Service kết nối Google Drive API để duyệt và tải file (PDF, DOCX, Google Docs...).
 """
 from __future__ import annotations
 
@@ -26,16 +13,13 @@ from google.oauth2.credentials import Credentials
 
 from core.logger import logger
 
-# ── MIME type mappings ──────────────────────────────────────────────────────
-
-# Google Workspace native types → export MIME
 GOOGLE_EXPORT_MAP = {
     "application/vnd.google-apps.document":     "text/plain",
     "application/vnd.google-apps.spreadsheet":  "text/csv",
     "application/vnd.google-apps.presentation": "text/plain",
 }
 
-# Binary file types → download trực tiếp + extension để parse
+# Map binary files sang extension tương ứng
 BINARY_DOWNLOAD_MAP = {
     "application/pdf":                                                          ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
@@ -43,14 +27,9 @@ BINARY_DOWNLOAD_MAP = {
     "text/plain": ".txt",
 }
 
-# Tất cả MIME được chấp nhận
 SUPPORTED_MIMES = set(GOOGLE_EXPORT_MAP.keys()) | set(BINARY_DOWNLOAD_MAP.keys())
-
-# Google Drive folder type
 FOLDER_MIME = "application/vnd.google-apps.folder"
 
-
-# ── Data models ─────────────────────────────────────────────────────────────
 
 @dataclass
 class DriveFile:
@@ -86,19 +65,11 @@ class DriveFolder:
     parents: List[str] = field(default_factory=list)
 
 
-# ── Service ─────────────────────────────────────────────────────────────────
-
 class GoogleDriveService:
-    """Quản lý tương tác với Google Drive API v3."""
+    """Wrapper cho Google Drive API v3"""
 
     def __init__(self, access_token: str, refresh_token: str = ""):
-        """
-        Khởi tạo service từ access_token (lấy từ DB người dùng).
-
-        Args:
-            access_token: Google OAuth2 access token của user.
-            refresh_token: Refresh token để gia hạn tự động (tùy chọn).
-        """
+        """Khởi tạo với Google OAuth credentials"""
         from config.settings import settings
         creds = Credentials(
             token=access_token,
@@ -110,17 +81,8 @@ class GoogleDriveService:
         self._svc = build("drive", "v3", credentials=creds, cache_discovery=False)
         logger.info("[GoogleDriveService] Khởi tạo thành công")
 
-    # ── List operations ──────────────────────────────────────────────────
-
     def list_folders(self, parent_id: Optional[str] = None) -> List[DriveFolder]:
-        """
-        List thư mục trong Drive (hoặc trong một thư mục cha).
-
-        Args:
-            parent_id: ID thư mục cha. None = root Drive.
-        Returns:
-            Danh sách DriveFolder.
-        """
+        """Liệt kê thư mục trong Drive"""
         if parent_id:
             q = f"mimeType='{FOLDER_MIME}' and '{parent_id}' in parents and trashed=false"
         else:
@@ -152,17 +114,7 @@ class GoogleDriveService:
         folder_id: Optional[str] = None,
         max_results: int = 50,
     ) -> List[DriveFile]:
-        """
-        List file được hỗ trợ trong Drive (hoặc trong thư mục cụ thể).
-        Chỉ trả về MIME types được hỗ trợ.
-
-        Args:
-            folder_id: ID thư mục. None = toàn bộ Drive.
-            max_results: Số file tối đa trả về.
-        Returns:
-            Danh sách DriveFile đã lọc.
-        """
-        # Xây dựng MIME filter
+        """Liệt kê các file được hỗ trợ trong thư mục"""
         mime_conditions = " or ".join(
             f"mimeType='{m}'" for m in SUPPORTED_MIMES
         )
@@ -198,7 +150,6 @@ class GoogleDriveService:
         return files
 
     def get_file_metadata(self, file_id: str) -> dict:
-        """Lấy metadata của một file."""
         try:
             return self._svc.files().get(
                 fileId=file_id,
@@ -208,28 +159,17 @@ class GoogleDriveService:
             logger.error(f"[GoogleDriveService] get_file_metadata error: {e}")
             raise
 
-    # ── Content extraction ───────────────────────────────────────────────
-
     def get_file_content(self, file: DriveFile) -> Tuple[str, bytes]:
-        """
-        Lấy nội dung file từ Drive.
-
-        Returns:
-            Tuple (extension, content_bytes)
-            - extension: ".txt", ".pdf", ".docx", ".pptx", ".csv"
-            - content_bytes: nội dung nhị phân của file
-        """
+        """Tải nội dung file và trả về tuple (extension, bytes)"""
         mime = file.mime_type
 
         if mime in GOOGLE_EXPORT_MAP:
-            # Google Workspace → export
             export_mime = GOOGLE_EXPORT_MAP[mime]
             ext = ".csv" if "csv" in export_mime else ".txt"
             content = self._export_google_file(file.id, export_mime)
             return ext, content
 
         elif mime in BINARY_DOWNLOAD_MAP:
-            # File thông thường → download
             ext = BINARY_DOWNLOAD_MAP[mime]
             content = self._download_binary(file.id)
             return ext, content
@@ -238,14 +178,13 @@ class GoogleDriveService:
             raise ValueError(f"MIME type không được hỗ trợ: {mime}")
 
     def _export_google_file(self, file_id: str, export_mime: str) -> bytes:
-        """Export Google Workspace file sang text/plain hoặc text/csv."""
+        """Xuất Google Docs/Sheets sang dạng bytes"""
         try:
             logger.info(f"[GoogleDriveService] Export file {file_id} → {export_mime}")
             response = self._svc.files().export(
                 fileId=file_id,
                 mimeType=export_mime,
             ).execute()
-            # export() returns bytes
             if isinstance(response, bytes):
                 return response
             return str(response).encode("utf-8")
@@ -254,7 +193,7 @@ class GoogleDriveService:
             raise
 
     def _download_binary(self, file_id: str) -> bytes:
-        """Download binary file từ Drive."""
+        """Tải file nhị phân trực tiếp"""
         try:
             logger.info(f"[GoogleDriveService] Download file {file_id}")
             request = self._svc.files().get_media(fileId=file_id)
@@ -269,19 +208,8 @@ class GoogleDriveService:
             raise
 
 
-# ── Helper: build service từ user credentials trong DB ──────────────────────
-
 def build_drive_service_for_user(user) -> GoogleDriveService:
-    """
-    Tạo GoogleDriveService từ User ORM object (đã có token trong DB).
-
-    Args:
-        user: User SQLAlchemy model với google_access_token.
-    Returns:
-        GoogleDriveService instance.
-    Raises:
-        ValueError: Nếu user không có Google token.
-    """
+    """Khởi tạo GoogleDriveService từ User ORM bằng cách giải mã token"""
     from core.crypto import decrypt_token
 
     if not user.google_access_token:

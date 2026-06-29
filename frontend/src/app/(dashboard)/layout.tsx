@@ -1,6 +1,4 @@
-/**
- * Dashboard layout – Sidebar + Header + Main content area.
- */
+/** Giao diện chính của dashboard gồm Sidebar, Header và Content */
 
 "use client";
 
@@ -39,15 +37,12 @@ export default function DashboardLayout({
   }
 
   if (!token) {
-    return null; // Will redirect shortly
+    return null;
   }
 
   return (
     <div className="h-screen flex overflow-hidden bg-bg-primary">
-      {/* Sidebar */}
       <AppSidebar />
-
-      {/* Main area */}
       <div
         className={cn(
           "flex-1 flex flex-col min-w-0",

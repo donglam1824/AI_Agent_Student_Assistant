@@ -1,7 +1,5 @@
 """
-agents/doc_search/state.py
----------------------------
-TypedDict state cho DocSearch LangGraph agent.
+Định nghĩa state cho DocSearch LangGraph agent.
 """
 from typing import Annotated, List
 from typing_extensions import TypedDict

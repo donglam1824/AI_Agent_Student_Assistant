@@ -1,7 +1,5 @@
 """
-core/security.py
-----------------
-JWT token creation and verification for ORCA API authentication.
+Tạo và xác thực JWT token.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -12,7 +10,6 @@ from pydantic import BaseModel
 
 from config.settings import settings
 
-# JWT Configuration (from settings / .env)
 JWT_SECRET_KEY = settings.jwt_secret_key
 JWT_ALGORITHM = settings.jwt_algorithm
 JWT_EXPIRE_HOURS = 24 * 7  # 7 days
@@ -25,7 +22,7 @@ class TokenData(BaseModel):
 
 
 def create_access_token(user_id: str, email: str) -> str:
-    """Create a JWT access token for authenticated user."""
+    """Tạo JWT access token"""
     expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
     payload = {
         "sub": user_id,
@@ -36,7 +33,7 @@ def create_access_token(user_id: str, email: str) -> str:
 
 
 def verify_token(token: str) -> Optional[TokenData]:
-    """Verify and decode a JWT token. Returns TokenData or None."""
+    """Xác thực và giải mã JWT token"""
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         user_id: str = payload.get("sub")
@@ -48,18 +45,18 @@ def verify_token(token: str) -> Optional[TokenData]:
         return None
 
 def decode_token_allow_expired(token: str) -> Optional[TokenData]:
-    """Verify and decode a JWT token, allowing expiration within a grace period."""
+    """Giải mã JWT token, chấp nhận hết hạn trong khoảng gia hạn (grace period)"""
     try:
-        # options={"verify_exp": False} disables automatic expiration check
+        # Bỏ qua tự động check exp
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
         
-        # Check expiration manually with grace period
+        # Kiểm tra exp thủ công kèm thời gian gia hạn
         exp = payload.get("exp")
         if exp is not None:
             exp_time = datetime.fromtimestamp(exp, tz=timezone.utc)
             grace_period = timedelta(hours=JWT_REFRESH_GRACE_HOURS)
             if datetime.now(timezone.utc) > exp_time + grace_period:
-                return None # Expired beyond grace period
+                return None # Đã quá thời gian gia hạn
                 
         user_id: str = payload.get("sub")
         email: str = payload.get("email")

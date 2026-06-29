@@ -1,7 +1,4 @@
-/**
- * components/layout/ThemeToggle.tsx
- * Dark/Light mode toggle button with animated Sun/Moon icon.
- */
+/** Nút chuyển đổi giữa giao diện Sáng/Tối */
 
 "use client";
 

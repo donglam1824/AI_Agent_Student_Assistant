@@ -1,7 +1,4 @@
-/**
- * hooks/useChat.ts
- * Custom hook for chat with SSE streaming from FastAPI.
- */
+/** Custom hook kết nối chat SSE streaming từ FastAPI */
 
 "use client";
 
@@ -39,7 +36,7 @@ export function useChat(chatId: string | null): UseChatReturn {
       setIsLoading(true);
       setCurrentAgent(null);
 
-      // Add user message immediately (optimistic)
+      // Hiển thị tin nhắn user ngay (optimistic update)
       const userMsg: ChatMessage = {
         id: tempId(),
         role: "user",
@@ -49,7 +46,7 @@ export function useChat(chatId: string | null): UseChatReturn {
       };
       setMessages((prev) => [...prev, userMsg]);
 
-      // Add placeholder for AI response
+      // Chờ tin nhắn từ AI
       const aiMsgId = tempId();
       const aiMsg: ChatMessage = {
         id: aiMsgId,
@@ -80,9 +77,9 @@ export function useChat(chatId: string | null): UseChatReturn {
 
           buffer += decoder.decode(value, { stream: true });
 
-          // Parse SSE events from buffer
+          // Parse sự kiện SSE từ buffer
           const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+          buffer = lines.pop() || "";
 
           let eventType = "";
 
@@ -96,14 +93,14 @@ export function useChat(chatId: string | null): UseChatReturn {
 
                 if (eventType === "agent") {
                   setCurrentAgent(data.agent as AgentType);
-                  // Update the AI message with agent info
+                  // Cập nhật thông tin Agent vào tin nhắn
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === aiMsgId ? { ...m, agent: data.agent } : m
                     )
                   );
                 } else if (eventType === "token") {
-                  // Append content to AI message
+                  // Thêm nội dung stream vào tin nhắn
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === aiMsgId
@@ -112,13 +109,13 @@ export function useChat(chatId: string | null): UseChatReturn {
                     )
                   );
                 } else if (eventType === "done") {
-                  // Mark streaming as complete
+                  // Hoàn thành stream
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === aiMsgId ? { ...m, isStreaming: false } : m
                     )
                   );
-                  // Update chatId if this was a new chat
+                  // Lưu chatId nếu là chat mới
                   if (data.chat_id) {
                     chatIdRef.current = data.chat_id;
                   }
@@ -126,7 +123,6 @@ export function useChat(chatId: string | null): UseChatReturn {
                   setError(data.message);
                 }
               } catch {
-                // Skip malformed JSON
               }
             }
           }
@@ -135,7 +131,7 @@ export function useChat(chatId: string | null): UseChatReturn {
         const message =
           err instanceof Error ? err.message : "Đã xảy ra lỗi kết nối";
         setError(message);
-        // Remove the empty AI message on error
+        // Báo lỗi vào tin nhắn AI
         setMessages((prev) =>
           prev.map((m) =>
             m.id === aiMsgId

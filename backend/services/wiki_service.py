@@ -1,19 +1,5 @@
 """
-services/wiki_service.py
-------------------------
-Markdown knowledge-base layer for ingested study documents.
-
-The service keeps a small per-user wiki under ``backend/data/wiki``:
-
-    data/wiki/{user_id}/
-      manifest.json
-      index.md
-      {category}/
-        _summary.md
-        {document}.md
-
-It is intentionally file-based so the generated knowledge base is easy to
-inspect, debug, and evolve without coupling it to the vector store.
+Dịch vụ quản lý wiki cá nhân dưới dạng Markdown cho tài liệu học tập.
 """
 
 from __future__ import annotations
@@ -47,7 +33,7 @@ class WikiUpdateResult:
 
 
 class WikiService:
-    """Create and maintain the per-user Markdown knowledge base."""
+    """Tạo và quản lý cơ sở tri thức Markdown cá nhân"""
 
     def upsert_document(
         self,
@@ -147,7 +133,7 @@ class WikiService:
         wiki_path: str,
         summary: str,
     ) -> None:
-        """Store document context in metadata without changing embed text."""
+        """Lưu ngữ cảnh tài liệu vào metadata để hỗ trợ RAG"""
         tags_text = ", ".join(tags) if tags else "không có"
         context = (
             f"Nguồn: {title}\n"

@@ -1,7 +1,5 @@
 """
-agents/calendar/state.py
--------------------------
-TypedDict state for the Calendar LangGraph agent.
+Định nghĩa state cho Calendar LangGraph agent.
 """
 
 from typing import Annotated, List
@@ -11,13 +9,7 @@ from langgraph.graph.message import add_messages
 
 
 class CalendarAgentState(TypedDict):
-    """
-    State object passed between nodes in the Calendar agent graph.
-
-    - messages:      Full conversation history (auto-appended via add_messages reducer)
-    - user_request:  The latest user message text (for quick access in nodes)
-    - action_result: Result string from the last tool execution
-    """
+    """Trạng thái truyền nhận giữa các node trong Calendar agent graph"""
     messages: Annotated[List[BaseMessage], add_messages]
     user_request: str
     action_result: str

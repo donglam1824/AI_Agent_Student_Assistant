@@ -13,7 +13,7 @@ export function useEmailNotifications(): UseEmailNotificationsResult {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    // Chỉ kết nối khi có token trong localStorage (đã đăng nhập)
+    // Chỉ kết nối khi có token (đã đăng nhập)
     const token = localStorage.getItem("orca_token");
     if (!token) return;
 
@@ -23,14 +23,12 @@ export function useEmailNotifications(): UseEmailNotificationsResult {
     const MAX_RECONNECT_ATTEMPTS = 5;
 
     const connectSSE = () => {
-      // Vì EventSource mặc định không gửi headers custom (như Authorization),
-      // nên pass token qua query params
+      // Truyền token qua query params do EventSource không gửi được Authorization header
       const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/email/notifications/stream?token=${token}`;
       
       eventSource = new EventSource(sseUrl);
 
       eventSource.onopen = () => {
-        // Reset reconnect counter on successful connection
         reconnectAttempts = 0;
       };
 
@@ -39,7 +37,7 @@ export function useEmailNotifications(): UseEmailNotificationsResult {
           const newEmail: EmailSummary = JSON.parse(event.data);
           
           setNotifications((prev) => {
-            // Tránh duplicate
+            // Tránh trùng lặp
             if (prev.find(n => n.id === newEmail.id)) return prev;
             return [newEmail, ...prev];
           });
@@ -58,7 +56,6 @@ export function useEmailNotifications(): UseEmailNotificationsResult {
 
         reconnectAttempts++;
         if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-          // Exponential backoff: 2s, 4s, 8s, 16s, 32s
           const delay = Math.min(2000 * Math.pow(2, reconnectAttempts - 1), 32000);
           console.warn(
             `SSE disconnected. Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`

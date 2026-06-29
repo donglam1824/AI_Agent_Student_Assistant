@@ -1,7 +1,4 @@
-/**
- * components/chat/ChatInput.tsx
- * Chat input bar with auto-resize textarea and send button.
- */
+/** Ô nhập chat hỗ trợ gửi file và chọn nguồn tài liệu RAG */
 
 "use client";
 
@@ -32,7 +29,6 @@ export function ChatInput({
     if (!text.trim() || disabled) return;
     onSend(text.trim());
     setText("");
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -47,10 +43,9 @@ export function ChatInput({
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
-    // Auto-resize
     const el = e.target;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`; // Max ~4 lines
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
 
   const handleFileClick = () => {
@@ -72,7 +67,6 @@ export function ChatInput({
         "border-t border-border bg-bg-primary"
       )}
     >
-      {/* Upload button */}
       {onFileUpload && (
         <>
           <button
@@ -116,7 +110,6 @@ export function ChatInput({
         </button>
       )}
 
-      {/* Textarea */}
       <div className="flex-1 min-w-0 relative">
         <textarea
           ref={textareaRef}
@@ -138,7 +131,6 @@ export function ChatInput({
         />
       </div>
 
-      {/* Send button */}
       <button
         id="chat-send-btn"
         onClick={handleSend}

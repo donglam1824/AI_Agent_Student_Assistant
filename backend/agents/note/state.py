@@ -1,7 +1,5 @@
 """
-agents/note/state.py
---------------------
-TypedDict state for the Note LangGraph agent.
+Định nghĩa state cho Note LangGraph agent.
 """
 
 from typing import Annotated, List
@@ -11,9 +9,7 @@ from langgraph.graph.message import add_messages
 
 
 class NoteAgentState(TypedDict):
-    """
-    State object passed between nodes in the Note agent graph.
-    """
+    """Trạng thái truyền nhận giữa các node trong Note agent graph"""
     messages: Annotated[List[BaseMessage], add_messages]
     user_request: str
     action_result: str

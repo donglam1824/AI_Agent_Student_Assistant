@@ -1,8 +1,5 @@
 """
-db/database.py
---------------
-SQLAlchemy engine, session, and base model configuration.
-Uses SQLite for local development (no external DB server needed).
+Cấu hình kết nối DB (SQLite) qua SQLAlchemy.
 """
 
 from sqlalchemy import create_engine
@@ -12,7 +9,7 @@ DATABASE_URL = "sqlite:///./orca.db"
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},  # SQLite-specific
+    connect_args={"check_same_thread": False},
     echo=False,
 )
 
@@ -20,12 +17,12 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 class Base(DeclarativeBase):
-    """Base class for all ORM models."""
+    """Base class cho các ORM models"""
     pass
 
 
 def get_db():
-    """FastAPI dependency – yields a DB session per request."""
+    """Dependency lấy DB session cho mỗi request"""
     db = SessionLocal()
     try:
         yield db
@@ -34,9 +31,9 @@ def get_db():
 
 
 def init_db():
-    """Create all tables (call once at startup)."""
+    """Khởi tạo các bảng DB (gọi khi startup)"""
     Base.metadata.create_all(bind=engine)
-    # Enable WAL mode for SQLite to prevent locking issues
+    # Bật chế độ WAL cho SQLite để tránh bị khóa DB
     with engine.begin() as conn:
         conn.exec_driver_sql("PRAGMA journal_mode=WAL")
         conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
@@ -44,7 +41,7 @@ def init_db():
 
 
 def ensure_schema():
-    """Apply small SQLite schema upgrades for local development."""
+    """Tự động migrate schema SQLite khi dev local"""
     if not DATABASE_URL.startswith("sqlite"):
         return
 
@@ -75,14 +72,12 @@ def ensure_schema():
     }
 
     with engine.begin() as conn:
-        # Migrate users table
         rows_users = conn.exec_driver_sql("PRAGMA table_info(users)").fetchall()
         existing_users = {row[1] for row in rows_users}
         for column, column_type in additions_users.items():
             if column not in existing_users:
                 conn.exec_driver_sql(f"ALTER TABLE users ADD COLUMN {column} {column_type}")
 
-        # Migrate documents table
         rows_docs = conn.exec_driver_sql("PRAGMA table_info(documents)").fetchall()
         existing_docs = {row[1] for row in rows_docs}
         for column, column_type in additions_documents.items():

@@ -1,9 +1,5 @@
 """
-agents/note/agent.py
---------------------
-NoteAgent – LangGraph ReAct-style agent for note operations.
-Nhận user_id và inject vào RunnableConfig khi invoke graph.
-Ghi chú được lưu qua Google Tasks (ORCA Notes tasklist).
+Agent quản lý ghi chú (Google Tasks) sử dụng LangGraph.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -12,7 +8,7 @@ from langgraph.prebuilt import ToolNode
 
 from agents.note.nodes import make_reason_node, should_continue
 from agents.note.state import NoteAgentState
-from core.llm_manager import llm_manager
+from core.llm_manager import llm_manager, coerce_message_content
 from core.logger import logger
 from tools.note.list_notes import list_notes
 from tools.note.create_note import create_note
@@ -44,7 +40,6 @@ NOTE_TOOLS = [
 
 
 class NoteAgent:
-    """LangGraph-based Note Agent – hỗ trợ đa người dùng qua user_id."""
 
     def __init__(self, user_id: str) -> None:
         self._user_id = user_id
@@ -87,4 +82,4 @@ class NoteAgent:
 
         logger.info(f"NoteAgent.run – user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
-        return final_state["messages"][-1].content
+        return coerce_message_content(final_state["messages"][-1].content)

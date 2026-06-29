@@ -1,9 +1,6 @@
 """
-agents/teams/state.py
----------------------
-TypedDict state for the Teams LangGraph agent.
+Định nghĩa state cho Teams LangGraph agent.
 """
-
 from typing import Annotated, List
 
 from langchain_core.messages import BaseMessage

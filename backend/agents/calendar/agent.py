@@ -1,9 +1,5 @@
 """
-agents/calendar/agent.py
--------------------------
-CalendarAgent – LangGraph ReAct-style agent for calendar operations.
-Nhận user_id và inject vào RunnableConfig khi invoke graph,
-để các tools có thể truy cập thông tin người dùng.
+Agent quản lý lịch học (Google Calendar) sử dụng LangGraph.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -13,7 +9,7 @@ from langgraph.prebuilt import ToolNode
 from agents.calendar.nodes import make_reason_node, should_continue
 from agents.calendar.state import CalendarAgentState
 from config.settings import settings
-from core.llm_manager import llm_manager
+from core.llm_manager import llm_manager, coerce_message_content
 from core.logger import logger
 from tools.calendar.list_events import list_calendar_events
 from tools.calendar.create_event import create_calendar_event
@@ -42,9 +38,6 @@ CALENDAR_TOOLS = [
 
 
 class CalendarAgent:
-    """
-    LangGraph-based Calendar Agent – hỗ trợ đa người dùng qua user_id.
-    """
 
     def __init__(self, user_id: str) -> None:
         self._user_id = user_id
@@ -83,9 +76,9 @@ class CalendarAgent:
             "action_result": "",
         }
 
-        # Inject user_id qua RunnableConfig để các tools có thể truy cập
+        # Truyền user_id qua config cho các tools
         config = {"configurable": {"user_id": self._user_id}}
 
         logger.info(f"CalendarAgent.run – user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
-        return final_state["messages"][-1].content
+        return coerce_message_content(final_state["messages"][-1].content)

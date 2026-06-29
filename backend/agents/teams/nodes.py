@@ -1,7 +1,5 @@
 """
-agents/teams/nodes.py
----------------------
-Node functions for the Teams LangGraph agent.
+Các nodes cho Teams LangGraph agent.
 """
 
 from langchain_core.messages import AIMessage

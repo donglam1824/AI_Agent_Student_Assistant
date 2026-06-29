@@ -1,20 +1,6 @@
 """
-core/llm_manager.py
---------------------
-LLMManager – Quản lý và định tuyến các LLM provider theo loại tác vụ.
-
-Mục tiêu:
-  - Một điểm duy nhất để lấy LLM instance trong toàn bộ hệ thống.
-  - Hỗ trợ nhiều provider: Gemini, OpenAI, Ollama, ...
-  - Cho phép route từng tác vụ (calendar, rag, email, ...) sang LLM tốt nhất.
-  - Lazy init: provider chỉ được khởi tạo khi lần đầu dùng đến.
-
-Cách dùng:
-    from core.llm_manager import llm_manager
-
-    llm = llm_manager.get("calendar")           # lấy LLM cho tác vụ lịch
-    llm_with_tools = llm_manager.get_with_tools("calendar", tools)
-    llm = llm_manager.get_provider("openai")    # lấy trực tiếp theo tên provider
+Quản lý và định tuyến LLM client (Gemini, OpenAI, Ollama...) theo từng loại task.
+Hỗ trợ lazy load và tự động fallback.
 """
 
 from __future__ import annotations
@@ -29,8 +15,7 @@ from config.settings import settings
 from core.logger import logger
 
 
-# ── Provider registry ──────────────────────────────────────────────────────────
-# Thêm provider mới tại đây, không cần sửa code ở chỗ khác.
+# Đăng ký các provider mới tại đây
 
 def _exception_text(exc: Exception) -> str:
     parts: list[str] = []
@@ -80,7 +65,7 @@ def _extract_retry_delay_seconds(exc: Exception) -> float | None:
 
 
 def coerce_message_content(content: Any) -> str:
-    """Coerce LangChain message content (which could be string or list) to plain string."""
+    """Ép kiểu nội dung tin nhắn LangChain (chuỗi/danh sách) thành chuỗi thường"""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -101,7 +86,7 @@ def coerce_message_content(content: Any) -> str:
 
 
 class FallbackChatModel:
-    """Small proxy that tries the next LLM model on quota/rate-limit errors."""
+    """Proxy tự động chuyển sang model dự phòng khi lỗi quota/rate-limit"""
 
     _cooldowns: dict[str, float] = {}
 
@@ -124,7 +109,7 @@ class FallbackChatModel:
 
     def _get_model_instance(self, name: str, factory: Callable[[], Any]) -> Any:
         if name not in self._instances:
-            model = factory()
+            model = factory() if callable(factory) else factory
             for tools, kwargs in self._bound_tools:
                 model = model.bind_tools(tools, **kwargs)
             if self._structured_output:
@@ -306,7 +291,7 @@ class FallbackChatModel:
 
 
 def _build_gemini_model(model_name: str) -> BaseChatModel:
-    """Khởi tạo Google Gemini (mặc định: gemini-2.0-flash)."""
+    """Khởi tạo model Gemini"""
     from langchain_google_genai import ChatGoogleGenerativeAI  # lazy import
 
     if not settings.gemini_api_key:
@@ -318,8 +303,7 @@ def _build_gemini_model(model_name: str) -> BaseChatModel:
         model=model_name,
         google_api_key=settings.gemini_api_key,
         temperature=0,
-        max_retries=0, # Disable retries so FallbackChatModel can failover immediately
-        # convert_system_message_to_human=True,  # bỏ comment nếu gặp lỗi system message
+        max_retries=0, # Tắt retry để kích hoạt fallback ngay
     )
 
 
@@ -333,7 +317,7 @@ def _split_model_names(value: str) -> list[str]:
 
 
 def _build_gemini() -> Any:
-    """Build Google Gemini with quota-aware model fallbacks."""
+    """Khởi tạo Gemini kèm cơ chế fallback"""
     model_names = _split_model_names(
         ",".join((settings.gemini_model, settings.gemini_fallback_models))
     )
@@ -344,12 +328,12 @@ def _build_gemini() -> Any:
             "LLMManager: Gemini fallback chain configured: "
             f"{model_names}"
         )
-    # Always use FallbackChatModel to benefit from lazy loading, even for a single model
+    # Luôn bọc trong FallbackChatModel để tận dụng cơ chế lazy loading
     return FallbackChatModel(factories)
 
 
 def _build_openai() -> Any:
-    """Khởi tạo OpenAI GPT (fallback hoặc tác vụ đặc thù)."""
+    """Khởi tạo model OpenAI"""
     def _factory():
         from langchain_openai import ChatOpenAI  # lazy import
 
@@ -362,46 +346,33 @@ def _build_openai() -> Any:
             model=settings.openai_model,
             api_key=settings.openai_api_key,
             temperature=0,
-            max_retries=0, # Disable retries to fail fast
+            max_retries=0, # Tắt retry để báo lỗi nhanh (fail-fast)
         )
     return FallbackChatModel([(settings.openai_model, _factory)])
 
 
 def _build_ollama() -> Any:
-    """Khởi tạo Ollama (chạy local, miễn phí hoàn toàn)."""
+    """Khởi tạo Ollama chạy local"""
     def _factory():
-        from langchain_ollama import ChatOllama  # lazy import – cần pip install langchain-ollama
+        from langchain_ollama import ChatOllama  # lazy import
 
         return ChatOllama(model="llama3", temperature=0)
     return FallbackChatModel([("llama3", _factory)])
-
-
-# Map tên provider → hàm factory
-_PROVIDER_FACTORIES: dict[str, Any] = {
+_PROVIDER_FACTORIES = {
     "gemini": _build_gemini,
     "openai": _build_openai,
     "ollama": _build_ollama,
 }
 
 
-# ── Task → Provider routing ────────────────────────────────────────────────────
-# Điều chỉnh bảng này khi bạn tìm được LLM tốt hơn cho từng tác vụ.
-# Key "default" là fallback khi không tìm thấy task trong bảng.
-
+# Cấu hình routing task mặc định
 _DEFAULT_TASK_ROUTING: dict[str, str] = {
-    # Tác vụ lịch – cần gọi tool chính xác → Gemini Flash đủ tốt và nhanh
     "calendar": "gemini",
-    # RAG / tìm kiếm tài liệu – context window lớn → Gemini
     "rag": "gemini",
-    # Gửi/phân loại email – viết văn bản → Gemini
     "email": "gemini",
-    # Ghi chú – yêu cầu thấp → Gemini
     "notes": "gemini",
-    # Nhắc nhở – đơn giản → Gemini
     "reminder": "gemini",
-    # Tác vụ yêu cầu reasoning phức tạp → chuyển OpenAI khi cần
-    "reasoning": "openai",
-    # Fallback cho mọi task không có trong bảng
+    "reasoning": "openai", # Lý luận phức tạp dùng OpenAI
     "default": "gemini",
 }
 
@@ -409,28 +380,20 @@ _DEFAULT_TASK_ROUTING: dict[str, str] = {
 # ── LLMManager ────────────────────────────────────────────────────────────────
 
 class LLMManager:
-    """
-    Quản lý vòng đời và routing các LLM provider.
-
-    Attributes:
-        _providers: Cache {provider_name -> instance} – lazy init.
-        _task_routing: Bảng ánh xạ {task_name -> provider_name}.
-    """
+    """Quản lý vòng đời và routing các LLM client"""
 
     def __init__(
         self,
         task_routing: dict[str, str] | None = None,
     ) -> None:
         self._providers: dict[str, Any] = {}
-        # Cho phép override routing từ bên ngoài (tuỳ chỉnh theo dự án)
         self._task_routing: dict[str, str] = task_routing or dict(_DEFAULT_TASK_ROUTING)
-        # Provider mặc định đọc từ settings (có thể override qua .env)
         self._default_provider: str = settings.default_llm_provider
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 
     def _load_provider(self, name: str) -> Any:
-        """Lazy-init một provider theo tên, cache lại để tái sử dụng."""
+        """Khởi tạo lazy và cache provider"""
         if name not in self._providers:
             factory = _PROVIDER_FACTORIES.get(name)
             if factory is None:
@@ -443,7 +406,7 @@ class LLMManager:
         return self._providers[name]
 
     def _resolve_provider(self, task: str) -> str:
-        """Tra bảng routing, fallback về default nếu không tìm thấy."""
+        """Tìm provider theo task (fallback về default)"""
         provider = self._task_routing.get(task) or self._task_routing.get("default")
         if provider is None:
             provider = self._default_provider
@@ -485,16 +448,7 @@ class LLMManager:
         task: str,
         tools: list[Any],
     ) -> Any:
-        """
-        Trả về LLM đã bind tools – tiện dùng trong agent init.
-
-        Args:
-            task: Tên tác vụ.
-            tools: Danh sách LangChain tools.
-
-        Returns:
-            LLM đã `.bind_tools(tools)`.
-        """
+        """Lấy LLM đã được bind kèm tools"""
         llm = self.get(task)
         return llm.bind_tools(tools)
 
@@ -513,8 +467,7 @@ class LLMManager:
             )
         logger.info(f"LLMManager: routing '{task}' → '{provider_name}'")
         self._task_routing[task] = provider_name
-        # Nếu provider mới chưa init, reset để trigger lazy-init lần sau
-        # (không force init ngay để tránh lỗi khi chưa có API key)
+        # Reset để trigger lazy-init sau (tránh lỗi API key nếu init ngay)
 
     def info(self) -> dict[str, Any]:
         """Trả về trạng thái hiện tại – dùng cho debug/logging."""
@@ -525,7 +478,5 @@ class LLMManager:
         }
 
 
-# ── Singleton ──────────────────────────────────────────────────────────────────
-# Import dòng này ở mọi nơi cần dùng LLM:
-#   from core.llm_manager import llm_manager
+# Singleton instance
 llm_manager = LLMManager()

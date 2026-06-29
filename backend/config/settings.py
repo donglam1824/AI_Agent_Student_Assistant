@@ -22,11 +22,9 @@ class Settings(BaseSettings):
     default_llm_provider: str = "gemini"
 
     # ── Google Gemini ──────────────────────────────────────────────────────
+    gemini_model: str = "gemini-1.5-flash"
     gemini_api_key: str = ""
-    # gemini-2.0-flash: nhanh + miễn phí bậc cao; gemini-1.5-pro: chất lượng cao hơn
-    gemini_model: str = "gemini-2.5-flash"
-    # Comma-separated Gemini fallback chain used when the primary model hits
-    # quota/rate-limit errors. Keep higher RPD models earlier in the list.
+    # Model Gemini dự phòng khi lỗi quota. Ưu tiên model RPD cao hơn lên trước.
     gemini_fallback_models: str = (
         "gemini-3.1-flash-lite,"
         "gemini-2.5-flash-lite,"
@@ -39,9 +37,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
-    # Embeddings / Vector RAG
-    # "local" avoids API quota by running sentence-transformers on this machine.
-    # Other supported values: "gemini", "openai".
+    # "local" để chạy sentence-transformers cục bộ tránh tốn API quota. Hỗ trợ: "gemini", "openai".
     embedding_provider: str = "local"
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embedding_batch_size: int = 32
@@ -50,7 +46,7 @@ class Settings(BaseSettings):
     azure_client_id: str = Field(default="", validation_alias=AliasChoices("AZURE_CLIENT_ID", "MS_CLIENT_ID"))
     azure_client_secret: str = Field(default="", validation_alias=AliasChoices("AZURE_CLIENT_SECRET", "MS_CLIENT_SECRET"))
     azure_tenant_id: str = Field(default="", validation_alias=AliasChoices("AZURE_TENANT_ID", "MS_TENANT_ID"))
-    # Delegated user UPN or object-id (needed for application-level access)
+    # UPN hoặc object-id của user (cần cho quyền ứng dụng)
     graph_user_id: str = Field(default="me", validation_alias=AliasChoices("GRAPH_USER_ID", "MS_GRAPH_USER_ID"))
     microsoft_redirect_uri: str = Field(default="http://localhost:3000/auth/microsoft/callback", validation_alias=AliasChoices("MICROSOFT_REDIRECT_URI", "MS_REDIRECT_URI"))
     microsoft_scopes: str = (
@@ -60,21 +56,18 @@ class Settings(BaseSettings):
         "Files.Read"
     )
 
-    # ── Google OAuth2 Web Flow ─────────────────────────────────────────────
-    # Client ID và Secret dùng cho server-side authorization code exchange
-    google_client_id: str = ""       # Lấy từ Google Cloud Console (Web app)
-    google_client_secret: str = ""   # Lấy từ Google Cloud Console
-    google_redirect_uri: str = "http://localhost:3000"  # Phải khớp với Google Console
+    # Client ID & Secret cho OAuth flow
+    google_client_id: str = ""       # Google Cloud Console (Web app)
+    google_client_secret: str = ""   
+    google_redirect_uri: str = "http://localhost:3000"  # Trùng redirect URI trong Google Console
     google_calendar_id: str = "primary"
 
-    # ── Google Drive RAG Integration ────────────────────────────────────────
-    # Số file tối đa được sync từ Drive vào RAG (tránh quá tải tài nguyên)
+    # Giới hạn số file sync từ Drive tránh quá tải
     google_drive_max_files: int = 50
-    # Yêu cầu scope drive.readonly khi login (true = thêm scope Drive)
+    # Thêm scope drive.readonly khi login
     google_drive_enabled: bool = True
 
-    # ── Token Encryption ────────────────────────────────────────────────────
-    # Sinh key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Fernet key để encrypt tokens
     token_encryption_key: str = ""
 
     # ── JWT Authentication ──────────────────────────────────────────────
@@ -86,17 +79,17 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────────────────────────────
     log_level: str = "INFO"
-    mock_graph: bool = True  # Use mock Graph service when True (dev/test)
+    mock_graph: bool = True  # Mock Graph khi dev/test
     # calendar_provider: "mock" | "google" | "msgraph"
     calendar_provider: str = "google"
     email_provider: str = "google"
     email_providers: str = ""
     default_email_provider: str = "gmail"
-    note_provider: str = "google"  # "sqlite" for local storage, "google" for Google Keep
+    note_provider: str = "google"  # "sqlite" (local) hoặc "google" (Google Keep)
     teams_provider: str = "msgraph"
 
 
 
 
-# Singleton – import this everywhere
+# Singleton dùng chung toàn app
 settings = Settings()

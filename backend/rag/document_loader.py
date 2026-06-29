@@ -1,13 +1,5 @@
 """
-rag/document_loader.py
-----------------------
-Load PDF, DOCX, PPTX, TXT files thành danh sách Document của LangChain.
-Tối ưu hóa chunking sử dụng Semantic Separators ranh giới ngữ nghĩa.
-
-Hỗ trợ 3 nguồn:
-  1. load(file_path)        — file trên disk (PDF/DOCX/PPTX/TXT)
-  2. load_from_text(text)   — text thuần (Google Docs/Slides/Sheets export)
-  3. load_from_bytes(bytes) — binary content (PDF/DOCX/PPTX tải từ Drive)
+Trích xuất và chia nhỏ tài liệu (PDF, DOCX, PPTX, TXT) thành chunks cho RAG.
 """
 import hashlib
 import json
@@ -24,9 +16,8 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from core.logger import logger
 
-# Chunk size có thể lớn hơn do đã có bộ chia cắt tốt hơn
-CHUNK_SIZE = 1000       # ký tự per chunk
-CHUNK_OVERLAP = 200     # overlap để không mất context ở ranh giới
+CHUNK_SIZE = 1000       
+CHUNK_OVERLAP = 200     # Ký tự chồng lấp giữa các chunk
 MARKDOWN_CACHE_DIR = Path(__file__).parent.parent / "data" / "markdown_cache"
 OFFICE_EXTENSIONS = {".docx", ".pptx"}
 
@@ -34,14 +25,14 @@ _MARKER_UNAVAILABLE_REASON: Optional[str] = None
 
 
 class DocumentLoader:
-    """Load và split tài liệu thành chunks theo ngữ nghĩa của câu/đoạn."""
+    """Tải và chia nhỏ tài liệu"""
 
     def __init__(
         self,
         chunk_size: int = CHUNK_SIZE,
         chunk_overlap: int = CHUNK_OVERLAP,
     ):
-        # Dùng regex để cắt đúng dấu chấm nhưng không mất dấu chấm
+        # Cắt theo dấu chấm nhưng giữ lại ký tự
         self._splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -52,17 +43,15 @@ class DocumentLoader:
                 "\n#### ",
                 "\n\n",
                 "\n",
-                r"(?<=\. )",  # Cắt theo dấu chấm câu tiếng Việt/Anh
+                r"(?<=\. )",
                 " ",
                 ""
             ],
             is_separator_regex=True
         )
 
-    # ── Source 1: File trên disk ─────────────────────────────────────────
-
     def load(self, file_path: str, metadata: Optional[dict] = None) -> List[Document]:
-        """Load file → split → trả về list Document."""
+        """Tải file từ disk, chia nhỏ và trả về danh sách Document"""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Không tìm thấy file: {file_path}")
@@ -86,46 +75,22 @@ class DocumentLoader:
         logger.info(f"DocumentLoader: {len(chunks)} chunks từ {path.name}")
         return chunks
 
-    # ── Source 2: Text thuần (Google Docs/Slides export) ─────────────────
-
     def load_from_text(self, text: str, metadata: dict) -> List[Document]:
-        """
-        Load từ text string (Google Drive export).
-        Dùng cho: Google Docs, Google Slides, Google Sheets (CSV), TXT từ Drive.
-
-        Args:
-            text: Nội dung text đã extract.
-            metadata: Dict chứa source, drive_file_id, drive_modified_time, v.v.
-        Returns:
-            Danh sách Document chunks.
-        """
+        """Chia nhỏ text string nguồn Google Docs/Slides export"""
         if not text or not text.strip():
             logger.warning(f"DocumentLoader.load_from_text: text rỗng cho {metadata.get('source', '?')}")
             return []
 
         doc = Document(page_content=text, metadata=metadata)
         chunks = self._splitter.split_documents([doc])
-        # Đảm bảo metadata được copy sang từng chunk
         for chunk in chunks:
             chunk.metadata.update(metadata)
 
         logger.info(f"DocumentLoader.load_from_text: {len(chunks)} chunks từ '{metadata.get('source', '?')}'")
         return chunks
 
-    # ── Source 3: Binary content (PDF/DOCX tải từ Drive) ─────────────────
-
     def load_from_bytes(self, content: bytes, ext: str, metadata: dict) -> List[Document]:
-        """
-        Load từ binary content (file download từ Google Drive/OneDrive).
-        Dùng cho: PDF, DOCX, PPTX tải từ Drive.
-
-        Args:
-            content: Nội dung binary của file.
-            ext: Extension file (".pdf", ".docx", ".pptx", ".txt").
-            metadata: Dict chứa source, drive_file_id, v.v.
-        Returns:
-            Danh sách Document chunks.
-        """
+        """Chia nhỏ file tải trực tiếp từ Drive/OneDrive dưới dạng bytes"""
         if not content:
             logger.warning(f"DocumentLoader.load_from_bytes: content rỗng cho {metadata.get('source', '?')}")
             return []
@@ -133,7 +98,7 @@ class DocumentLoader:
         ext = ext.lower()
         logger.info(f"DocumentLoader.load_from_bytes: xử lý {ext} ({len(content)} bytes)")
 
-        # Ghi ra file tạm để dùng lại các parser hiện có
+        # Lưu file tạm để parse
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
             tmp.write(content)
             tmp_path = Path(tmp.name)
@@ -148,7 +113,7 @@ class DocumentLoader:
             else:
                 raise ValueError(f"Extension không hỗ trợ: {ext}")
 
-            # Ghi đè metadata với thông tin Drive
+            # Cập nhật thông tin Drive
             for doc in raw_docs:
                 doc.metadata.update(metadata)
 
@@ -160,8 +125,6 @@ class DocumentLoader:
             return chunks
         finally:
             tmp_path.unlink(missing_ok=True)
-
-    # ── Private parsers ──────────────────────────────────────────────────
 
     def _load_pdf(self, path: Path, metadata: Optional[dict] = None) -> List[Document]:
         metadata = metadata or {}
@@ -429,8 +392,8 @@ class DocumentLoader:
         )]
 
 
-# ── Module-level helper (backward compatibility) ─────────────────────────────
+# ── Hàm tương thích ngược ─────────────────────────────────────────────────────
 
 def load_document(file_path: str, metadata: Optional[dict] = None) -> List[Document]:
-    """Backward-compatible helper. Dùng DocumentLoader.load() ngầm định."""
+    """Hàm helper tương thích ngược"""
     return DocumentLoader().load(file_path, metadata=metadata)

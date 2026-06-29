@@ -1,7 +1,5 @@
 """
-agents/doc_search/agent.py
----------------------------
-DocSearchAgent – LangGraph ReAct agent cho tìm kiếm tài liệu.
+Agent tìm kiếm tài liệu (RAG) sử dụng LangGraph.
 """
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -49,7 +47,6 @@ DOC_SEARCH_TOOLS = [search_documents, list_documents, list_drive_documents, guid
 
 
 class DocSearchAgent:
-    """LangGraph-based Document Search Agent."""
 
     def __init__(self, user_id: str | None = None) -> None:
         self._user_id = user_id
@@ -74,7 +71,7 @@ class DocSearchAgent:
         return builder.compile()
 
     def _rewrite_query(self, user_message: str) -> str:
-        """Dùng LLM để chuyển câu hỏi tự nhiên thành truy vấn tìm kiếm tối ưu."""
+        """Tối ưu câu hỏi người dùng thành từ khóa tìm kiếm ngữ nghĩa"""
         try:
             llm = llm_manager.get("rag")
             prompt = (
@@ -91,7 +88,6 @@ class DocSearchAgent:
             )
             response = llm.invoke(prompt)
             rewritten = coerce_message_content(response.content).strip() if hasattr(response, "content") else str(response).strip()
-            # Fallback nếu LLM trả về quá ngắn hoặc rỗng
             if len(rewritten) < 3:
                 return user_message
             logger.debug(f"Query rewrite: '{user_message}' → '{rewritten}'")
@@ -142,7 +138,6 @@ class DocSearchAgent:
 
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         
-        # Build message list: system + history + current user message
         messages = [SystemMessage(content=SYSTEM_PROMPT.format(current_time=current_time))]
         if chat_history:
             messages.extend(chat_history)
@@ -162,4 +157,4 @@ class DocSearchAgent:
         config = {"configurable": configurable} if configurable else None
         logger.info(f"DocSearchAgent.run - user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
-        return final_state["messages"][-1].content
+        return coerce_message_content(final_state["messages"][-1].content)

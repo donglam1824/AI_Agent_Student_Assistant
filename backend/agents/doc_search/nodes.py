@@ -1,7 +1,5 @@
 """
-agents/doc_search/nodes.py
----------------------------
-Node functions cho DocSearch LangGraph agent.
+Các nodes cho DocSearch LangGraph agent.
 """
 from langchain_core.messages import AIMessage
 from agents.doc_search.state import DocSearchAgentState

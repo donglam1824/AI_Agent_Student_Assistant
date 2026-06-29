@@ -19,9 +19,8 @@ from api.v1.router import api_router
 from db.database import init_db
 from core.logger import logger
 
-# ══════════════════════════════════════════════════════════════════════════
-# FastAPI Application
-# ══════════════════════════════════════════════════════════════════════════
+# FastAPI App
+
 
 app = FastAPI(
     title="ORCA API",
@@ -29,11 +28,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS – Allow Next.js frontend
+# Cấu hình CORS cho frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",   # Next.js dev server
+        "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
@@ -41,13 +40,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API routes
+# Đăng ký router
 app.include_router(api_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database tables and background services on startup."""
+    """Khởi tạo DB và scheduler khi startup"""
     logger.info("Starting ORCA API server...")
     init_db()
     logger.info("Database initialized.")
@@ -66,9 +65,8 @@ async def root():
     }
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# CLI Demo Mode (preserved from original)
-# ══════════════════════════════════════════════════════════════════════════
+# CLI Demo Mode
+
 
 WELCOME_BANNER = """
 ╔══════════════════════════════════════════════════════════════╗
@@ -86,10 +84,7 @@ Gõ 'quit' hoặc 'exit' để thoát.
 """
 
 def classify_intent(text: str) -> str:
-    """
-    Sử dụng LLM mặc định để phân tích câu hỏi người dùng và trả về 1 trong 4 nhãn:
-    'calendar', 'note', 'email', 'unknown'
-    """
+    """Phân loại intent của user bằng LLM"""
     from core.llm_manager import llm_manager, coerce_message_content
     llm = llm_manager.get("default")
     prompt = (
@@ -107,7 +102,7 @@ def classify_intent(text: str) -> str:
     response = llm.invoke(prompt)
     intent = coerce_message_content(response.content).strip().lower()
     
-    # Validation
+    
     if "calendar" in intent:
         return "calendar"
     if "note" in intent:
@@ -120,7 +115,7 @@ def classify_intent(text: str) -> str:
 
 
 def cli_main() -> None:
-    """Run the interactive CLI demo."""
+    """Chạy CLI demo"""
     from agents.calendar.agent import CalendarAgent
     from agents.note.agent import NoteAgent
 
@@ -131,7 +126,7 @@ def cli_main() -> None:
     calendar_agent = CalendarAgent()
     note_agent = NoteAgent()
     
-    # Lazy-load
+    # Lazy load agent khi cần
     email_agent: Optional['EmailAgent'] = None
     doc_search_agent: Optional['DocSearchAgent'] = None
     print("Sẵn sàng!\n" + "-" * 62)

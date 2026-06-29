@@ -1,8 +1,5 @@
 """
-core/auth.py
-------------
-Microsoft Graph authentication using Azure Identity.
-Returns a ready-to-use GraphServiceClient.
+Xác thực Microsoft Graph bằng Azure Identity.
 """
 
 from functools import lru_cache
@@ -13,16 +10,12 @@ from msgraph import GraphServiceClient
 from config.settings import settings
 from core.logger import logger
 
-# Microsoft Graph scopes required for Calendar access
 CALENDAR_SCOPES = ["https://graph.microsoft.com/.default"]
 
 
 @lru_cache(maxsize=1)
 def get_graph_client() -> GraphServiceClient:
-    """
-    Returns a cached GraphServiceClient authenticated with client credentials.
-    Requires AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID in settings.
-    """
+    """Khởi tạo và cache GraphServiceClient từ credentials trong settings"""
     if not all([settings.azure_client_id, settings.azure_client_secret, settings.azure_tenant_id]):
         raise EnvironmentError(
             "Missing Azure credentials. "
@@ -41,7 +34,7 @@ def get_graph_client() -> GraphServiceClient:
 
 @lru_cache(maxsize=1)
 def get_graph_credential() -> ClientSecretCredential:
-    """Return the Azure credential used for direct Microsoft Graph REST calls."""
+    """Lấy credentials Azure cho các REST call trực tiếp tới Graph"""
     if not all([settings.azure_client_id, settings.azure_client_secret, settings.azure_tenant_id]):
         raise EnvironmentError(
             "Missing Azure credentials. "
@@ -56,5 +49,5 @@ def get_graph_credential() -> ClientSecretCredential:
 
 
 def get_graph_access_token() -> str:
-    """Return an application access token for Microsoft Graph."""
+    """Lấy access token cho Microsoft Graph"""
     return get_graph_credential().get_token("https://graph.microsoft.com/.default").token

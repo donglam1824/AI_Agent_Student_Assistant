@@ -1,7 +1,4 @@
-/**
- * components/layout/Header.tsx
- * Minimal header with page title, theme toggle, and user menu.
- */
+/** Header gồm tiêu đề trang, đổi theme, và avatar người dùng */
 
 "use client";
 
@@ -25,7 +22,7 @@ export function Header({ title = "ORCA" }: HeaderProps) {
         "sticky top-0 z-30"
       )}
     >
-      {/* Left: Hamburger + Title */}
+
       <div className="flex items-center gap-3">
         <button
           id="sidebar-toggle"
@@ -38,7 +35,7 @@ export function Header({ title = "ORCA" }: HeaderProps) {
         <h1 className="text-base font-semibold text-text-primary">{title}</h1>
       </div>
 
-      {/* Right: Theme toggle + User */}
+
       <div className="flex items-center gap-2">
         <ThemeToggle />
 

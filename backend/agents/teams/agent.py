@@ -1,7 +1,5 @@
 """
-agents/teams/agent.py
----------------------
-TeamsAgent for reading Teams class updates, channel messages, and assignments.
+Agent kết nối Microsoft Teams sử dụng LangGraph.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,14 +8,13 @@ from langgraph.prebuilt import ToolNode
 
 from agents.teams.nodes import make_reason_node, should_continue
 from agents.teams.state import TeamsAgentState
-from core.llm_manager import llm_manager
+from core.llm_manager import llm_manager, coerce_message_content
 from core.logger import logger
 from tools.teams.list_assignments import list_class_assignments
 from tools.teams.list_channels import list_team_channels
 from tools.teams.list_classes import list_education_classes
 from tools.teams.list_messages import list_team_messages
 from tools.teams.list_teams import list_teams
-
 
 SYSTEM_PROMPT = """Ban la tro ly Microsoft Teams hoc tap cho sinh vien.
 Ban giup sinh vien kiem tra lop hoc Teams, kenh, thong bao, tin nhan moi va bai tap.
@@ -34,7 +31,6 @@ Huong dan:
 - Thoi gian hien tai: {current_time}
 """
 
-
 TEAMS_TOOLS = [
     list_teams,
     list_team_channels,
@@ -45,7 +41,6 @@ TEAMS_TOOLS = [
 
 
 class TeamsAgent:
-    """LangGraph-based Teams Agent."""
 
     def __init__(self, user_id: str) -> None:
         self._user_id = user_id
@@ -88,4 +83,4 @@ class TeamsAgent:
         config = {"configurable": {"user_id": self._user_id}}
         logger.info(f"TeamsAgent.run - user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
-        return final_state["messages"][-1].content
+        return coerce_message_content(final_state["messages"][-1].content)

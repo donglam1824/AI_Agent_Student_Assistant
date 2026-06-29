@@ -1,8 +1,5 @@
 """
-agents/email/agent.py
----------------------
-EmailAgent - LangGraph ReAct-style agent for Gmail and Outlook operations.
-Ưu tiên luồng học thuật: lọc → phân tích ưu tiên → trình bày có cấu trúc.
+Agent quản lý email học thuật (Gmail, Outlook) sử dụng LangGraph.
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,7 +11,7 @@ from agents.email.state import EmailAgentState
 from agents.email.tools.analyze_priority import analyze_priority
 from agents.email.tools.create_reminder import create_reminder
 from agents.email.tools.extract_deadline import extract_deadline
-from core.llm_manager import llm_manager
+from core.llm_manager import llm_manager, coerce_message_content
 from core.logger import logger
 from tools.email.list_emails import list_emails
 from tools.email.reply_email import reply_email
@@ -63,9 +60,9 @@ Huong dan uu tien (PHAI tuan thu):
 
 
 EMAIL_TOOLS = [
-    scan_and_summarize_emails,  # Ưu tiên: quét + lọc học thuật + phân loại ưu tiên
-    read_email_detail,          # Đọc chi tiết 1 email + tóm tắt + deadline
-    list_emails,                # Fallback: xem tất cả email
+    scan_and_summarize_emails,
+    read_email_detail,
+    list_emails,
     send_email,
     reply_email,
     analyze_priority,
@@ -75,7 +72,6 @@ EMAIL_TOOLS = [
 
 
 class EmailAgent:
-    """LangGraph-based Email Agent with multi-mailbox support."""
 
     def __init__(self, user_id: str) -> None:
         self._user_id = user_id
@@ -119,4 +115,4 @@ class EmailAgent:
 
         logger.info(f"EmailAgent.run - user={self._user_id}, query={user_message!r}")
         final_state = self._graph.invoke(initial_state, config=config)
-        return final_state["messages"][-1].content
+        return coerce_message_content(final_state["messages"][-1].content)

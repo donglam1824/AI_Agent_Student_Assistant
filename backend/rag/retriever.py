@@ -1,12 +1,5 @@
 """
-rag/retriever.py
-----------------
-Hybrid retriever for document RAG.
-
-The first pass uses Chroma semantic search. A local lexical pass then searches
-the same filtered candidate pool and reranks with keyword, phrase, and metadata
-signals. This keeps the default path local while making short or vague
-Vietnamese questions less brittle.
+Hybrid Retriever: Kết hợp Chroma semantic search với lexical search và rerank.
 """
 from __future__ import annotations
 
@@ -38,7 +31,7 @@ class _Candidate:
 
 
 class Retriever:
-    """Semantic search + local lexical rerank + context formatting."""
+    """Bộ truy xuất thông tin kết hợp semantic và lexical"""
 
     def __init__(
         self,
@@ -59,7 +52,7 @@ class Retriever:
         user_id: Optional[str] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
-        """Return reranked top-k chunks matching semantic and lexical signals."""
+        """Lấy top-k chunks phù hợp sau khi rerank"""
         store = get_vector_store()
         if store.count() == 0:
             logger.warning("Retriever: ChromaDB is empty.")
@@ -85,8 +78,7 @@ class Retriever:
             candidate = candidates.setdefault(key, _Candidate(doc=doc))
             candidate.semantic_score = max(candidate.semantic_score, self._clamp_score(score))
 
-        # Local lexical fallback over the same scoped corpus. This improves
-        # queries where embeddings under-score exact Vietnamese terms.
+        # Rerank bằng lexical để hỗ trợ các câu hỏi tiếng Việt có từ khóa chính xác
         for doc in store.get_documents(filter=filter_dict, limit=self._lexical_pool_limit):
             lexical_score = self._lexical_score(query_tokens, normalized_query, doc)
             if lexical_score <= 0:
@@ -118,7 +110,7 @@ class Retriever:
         return valid[: self._k]
 
     def format_context(self, docs: List[Document]) -> str:
-        """Join chunks into a context string for the answer LLM."""
+        """Gộp các chunk thành context string cho LLM"""
         if not docs:
             return "Không tìm thấy tài liệu nào đáp ứng hoặc đủ độ tương đồng với câu hỏi."
 

@@ -1,7 +1,4 @@
-/**
- * components/chat/DocumentSourcePicker.tsx
- * Modal for selecting the document scope used by chat RAG.
- */
+/** Modal chọn phạm vi tài liệu (RAG scope) cho chat */
 
 "use client";
 
