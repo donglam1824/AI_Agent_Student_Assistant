@@ -6,14 +6,14 @@ Authentication endpoints:
   - GET  /auth/me      → Get current user info
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db import crud
 from db.models import User
-from core.security import create_access_token
+from core.security import create_access_token, decode_token_allow_expired
 from core.logger import logger
 from api.deps import get_current_user
 
@@ -177,6 +177,47 @@ async def get_me(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         name=current_user.name,
         picture=current_user.picture,
+    )
+
+
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh_token(
+    authorization: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """Refresh an expired JWT token within the grace period."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header"
+        )
+        
+    token = authorization.split(" ")[1]
+    token_data = decode_token_allow_expired(token)
+    
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalid or expired beyond grace period"
+        )
+        
+    user = crud.get_user_by_id(db, token_data.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+        
+    jwt_token = create_access_token(user_id=user.id, email=user.email)
+    
+    return AuthResponse(
+        access_token=jwt_token,
+        user={
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture,
+        },
     )
 
 

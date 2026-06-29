@@ -128,7 +128,7 @@ export function EmailPanel({ isOpen, onClose }: EmailPanelProps) {
       setLoading(true);
       const res = await fetch("/api/v1/email/summaries?limit=20", {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem("orca_token")}`,
         },
       });
       if (res.ok) {

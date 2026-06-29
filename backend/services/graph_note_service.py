@@ -1,26 +1,17 @@
 """
 services/graph_note_service.py
 ---------------------------------
-Abstraction over Note API.
+Abstraction over Note API for Microsoft Graph.
 """
 
 from __future__ import annotations
 import uuid
 import datetime
-from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
-from models.note import NoteItem, NoteCreate, NoteUpdate
+from models.note import NoteItem
+from services.base_note_service import BaseNoteService
 from core.logger import logger
-
-
-class BaseNoteService(ABC):
-    @abstractmethod
-    async def list_notes(self, limit: int = 5) -> List[NoteItem]: ...
-
-    @abstractmethod
-    async def create_note(self, data: NoteCreate) -> NoteItem: ...
-
 
 class MockNoteService(BaseNoteService):
     def __init__(self) -> None:
@@ -33,7 +24,8 @@ class MockNoteService(BaseNoteService):
                 id=str(uuid.uuid4()),
                 title="Ghi chú môn AI",
                 content="Cần làm bài tập lớn về LangGraph.",
-                created_at="2026-03-26T10:00:00Z"
+                created_at="2026-03-26T10:00:00Z",
+                updated_at="2026-03-26T10:00:00Z"
             )
         )
 
@@ -41,16 +33,36 @@ class MockNoteService(BaseNoteService):
         logger.debug(f"[Mock Note] Listing notes: limit={limit}")
         return self._store[:limit]
 
-    async def create_note(self, data: NoteCreate) -> NoteItem:
-        logger.info(f"[Mock Note] Created note '{data.title}'")
+    async def create_note(self, title: str, content: str = "") -> NoteItem:
+        logger.info(f"[Mock Note] Created note '{title}'")
+        now = datetime.datetime.utcnow().isoformat() + "Z"
         note = NoteItem(
             id=str(uuid.uuid4()),
-            title=data.title,
-            content=data.content,
-            created_at=datetime.datetime.utcnow().isoformat() + "Z"
+            title=title,
+            content=content,
+            created_at=now,
+            updated_at=now
         )
         self._store.append(note)
         return note
+
+    async def update_note(self, note_id: str, title: Optional[str] = None, content: Optional[str] = None) -> NoteItem:
+        for note in self._store:
+            if note.id == note_id:
+                if title is not None:
+                    note.title = title
+                if content is not None:
+                    note.content = content
+                note.updated_at = datetime.datetime.utcnow().isoformat() + "Z"
+                return note
+        raise ValueError(f"Note {note_id} not found")
+
+    async def delete_note(self, note_id: str) -> bool:
+        for idx, note in enumerate(self._store):
+            if note.id == note_id:
+                self._store.pop(idx)
+                return True
+        return False
 
 
 class GraphNoteService(BaseNoteService):
@@ -79,28 +91,20 @@ class GraphNoteService(BaseNoteService):
                     id=p.id or "",
                     title=p.title or "(Không có tiêu đề)",
                     content="[Nội dung OneNote cần được tải riêng thông qua content endpoint]",
-                    created_at=p.created_date_time.isoformat() if p.created_date_time else ""
+                    created_at=p.created_date_time.isoformat() if p.created_date_time else "",
+                    updated_at=p.created_date_time.isoformat() if p.created_date_time else ""
                 ))
         return notes
 
-    async def create_note(self, data: NoteCreate) -> NoteItem:
+    async def create_note(self, title: str, content: str = "") -> NoteItem:
         # For simplicity, returning mock response if not implemented fully for Graph html page creations
         logger.warning("GraphNoteService create_note not fully implemented for OneNote HTML yet")
-        return await MockNoteService().create_note(data)
+        return await MockNoteService().create_note(title=title, content=content)
 
+    async def update_note(self, note_id: str, title: Optional[str] = None, content: Optional[str] = None) -> NoteItem:
+        logger.warning("GraphNoteService update_note not fully implemented for OneNote HTML yet")
+        raise NotImplementedError()
 
-def get_note_service() -> BaseNoteService:
-    from config.settings import settings
-    provider = settings.note_provider.lower().strip()
-
-    if provider == "mock" or settings.mock_graph:
-        return MockNoteService()
-
-    if provider == "google":
-        from services.google_note_service import GoogleNoteService
-        return GoogleNoteService()
-
-    if provider == "msgraph":
-        return GraphNoteService()
-
-    raise ValueError(f"Unknown NOTE_PROVIDER={provider!r}")
+    async def delete_note(self, note_id: str) -> bool:
+        logger.warning("GraphNoteService delete_note not fully implemented for OneNote HTML yet")
+        raise NotImplementedError()

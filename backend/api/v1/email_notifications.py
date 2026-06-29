@@ -3,16 +3,23 @@ api/v1/email_notifications.py
 -----------------------------
 SSE Endpoint để push notifications về email mới (urgent, morning briefs)
 đến Frontend theo thời gian thực.
+
+NOTE: EventSource API (browser) KHÔNG hỗ trợ gửi custom headers.
+      Vì vậy endpoint này xác thực qua query param `?token=xxx`
+      thay vì Authorization header.
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 import asyncio
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import json
 
+from db.database import get_db
 from db.models import User
-from api.deps import get_current_user
+from db import crud
+from core.security import verify_token
 from core.logger import logger
 
 router = APIRouter(prefix="/email/notifications", tags=["Email Notifications"])
@@ -56,18 +63,42 @@ async def sse_generator(request: Request, user_id: str) -> AsyncGenerator[str, N
         # Cleanup can be implemented here
         pass
 
+async def _get_user_from_token(token: str, db: Session) -> User:
+    """
+    Xác thực user từ JWT token (dùng cho SSE endpoint
+    vì EventSource không gửi được Authorization header).
+    """
+    token_data = verify_token(token)
+    if token_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token không hợp lệ hoặc đã hết hạn.",
+        )
+    user = crud.get_user_by_id(db, token_data.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Người dùng không tồn tại.",
+        )
+    return user
+
 @router.get("/stream")
 async def stream_notifications(
     request: Request,
-    current_user: User = Depends(get_current_user)
+    token: str = Query(..., description="JWT token for SSE authentication"),
+    db: Session = Depends(get_db),
 ):
     """
     SSE stream endpoint for email notifications.
     Client connects here to receive real-time updates.
+
+    Xác thực qua query param `?token=xxx` vì EventSource API
+    không hỗ trợ custom headers (Authorization).
     """
+    current_user = await _get_user_from_token(token, db)
     logger.info(f"Client connected to SSE stream: user={current_user.id}")
     return StreamingResponse(
-        sse_generator(request, current_user.id),
+        sse_generator(request, str(current_user.id)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -16,6 +16,7 @@ from config.settings import settings
 JWT_SECRET_KEY = settings.jwt_secret_key
 JWT_ALGORITHM = settings.jwt_algorithm
 JWT_EXPIRE_HOURS = 24 * 7  # 7 days
+JWT_REFRESH_GRACE_HOURS = 24
 
 
 class TokenData(BaseModel):
@@ -38,6 +39,28 @@ def verify_token(token: str) -> Optional[TokenData]:
     """Verify and decode a JWT token. Returns TokenData or None."""
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id: str = payload.get("sub")
+        email: str = payload.get("email")
+        if user_id is None or email is None:
+            return None
+        return TokenData(user_id=user_id, email=email)
+    except JWTError:
+        return None
+
+def decode_token_allow_expired(token: str) -> Optional[TokenData]:
+    """Verify and decode a JWT token, allowing expiration within a grace period."""
+    try:
+        # options={"verify_exp": False} disables automatic expiration check
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+        
+        # Check expiration manually with grace period
+        exp = payload.get("exp")
+        if exp is not None:
+            exp_time = datetime.fromtimestamp(exp, tz=timezone.utc)
+            grace_period = timedelta(hours=JWT_REFRESH_GRACE_HOURS)
+            if datetime.now(timezone.utc) > exp_time + grace_period:
+                return None # Expired beyond grace period
+                
         user_id: str = payload.get("sub")
         email: str = payload.get("email")
         if user_id is None or email is None:

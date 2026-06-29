@@ -20,6 +20,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from core.logger import logger
+from services.base_note_service import BaseNoteService
+from models.note import NoteItem
 
 
 SCOPES = ["https://www.googleapis.com/auth/tasks"]
@@ -71,7 +73,7 @@ def _get_credentials_from_db(user_id: str) -> Credentials:
         db.close()
 
 
-class GoogleNoteService:
+class GoogleNoteService(BaseNoteService):
     """
     Ghi chú qua Google Tasks API.
     Mỗi ghi chú = 1 Task trong Default Tasklist của user.
@@ -99,7 +101,17 @@ class GoogleNoteService:
             logger.warning(f"[Google Tasks] Cannot get tasklist, using @default: {e}")
             return DEFAULT_TASKLIST
 
-    async def list_notes(self, limit: int = 20) -> List[dict]:
+    def _map_task_to_note(self, task: dict) -> NoteItem:
+        updated = task.get("updated", "")
+        return NoteItem(
+            id=task.get("id", ""),
+            title=task.get("title", ""),
+            content=task.get("notes", ""),
+            created_at=updated,
+            updated_at=updated
+        )
+
+    async def list_notes(self, limit: int = 20) -> List[NoteItem]:
         """Lấy danh sách ghi chú (tasks) từ ORCA Notes tasklist."""
         tasklist_id = self._get_or_create_orca_tasklist()
         try:
@@ -109,20 +121,12 @@ class GoogleNoteService:
                 showCompleted=False,
             ).execute()
             tasks = result.get("items", [])
-            return [
-                {
-                    "id": t.get("id", ""),
-                    "title": t.get("title", ""),
-                    "content": t.get("notes", ""),
-                    "updated": t.get("updated", ""),
-                }
-                for t in tasks
-            ]
+            return [self._map_task_to_note(t) for t in tasks]
         except HttpError as e:
             logger.error(f"[Google Tasks] list_notes error: {e}")
             raise
 
-    async def create_note(self, title: str, content: str = "") -> dict:
+    async def create_note(self, title: str, content: str = "") -> NoteItem:
         """Tạo ghi chú mới (task) trong ORCA Notes."""
         tasklist_id = self._get_or_create_orca_tasklist()
         task_body = {
@@ -135,14 +139,30 @@ class GoogleNoteService:
                 body=task_body,
             ).execute()
             logger.info(f"[Google Tasks] user={self._user_id} created note: {created.get('id')}")
-            return {
-                "id": created.get("id", ""),
-                "title": created.get("title", ""),
-                "content": created.get("notes", ""),
-                "updated": created.get("updated", ""),
-            }
+            return self._map_task_to_note(created)
         except HttpError as e:
             logger.error(f"[Google Tasks] create_note error: {e}")
+            raise
+
+    async def update_note(self, note_id: str, title: Optional[str] = None, content: Optional[str] = None) -> NoteItem:
+        """Sửa ghi chú."""
+        tasklist_id = self._get_or_create_orca_tasklist()
+        task_body = {}
+        if title is not None:
+            task_body["title"] = title
+        if content is not None:
+            task_body["notes"] = content
+
+        try:
+            updated = self._service.tasks().patch(
+                tasklist=tasklist_id,
+                task=note_id,
+                body=task_body,
+            ).execute()
+            logger.info(f"[Google Tasks] user={self._user_id} updated note: {note_id}")
+            return self._map_task_to_note(updated)
+        except HttpError as e:
+            logger.error(f"[Google Tasks] update_note error: {e}")
             raise
 
     async def delete_note(self, note_id: str) -> bool:

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from db.models import User, Chat, ChatMessage, Document, Note, EmailSummary, EmailPreference
+from db.models import User, Chat, ChatMessage, Document, EmailSummary, EmailPreference
 
 
 # ── User ──────────────────────────────────────────────────────────────────
@@ -332,54 +332,7 @@ def get_topic_summary(db: Session, user_id: str) -> list[dict]:
     return result
 
 
-# ── Note (SQLite local storage) ──────────────────────────────────────────
 
-def create_note(db: Session, user_id: str, title: str, content: str = "") -> Note:
-    note = Note(user_id=user_id, title=title, content=content)
-    db.add(note)
-    db.commit()
-    db.refresh(note)
-    return note
-
-
-def get_user_notes(db: Session, user_id: str, limit: int = 20) -> list[Note]:
-    return (
-        db.query(Note)
-        .filter(Note.user_id == user_id)
-        .order_by(Note.updated_at.desc())
-        .limit(limit)
-        .all()
-    )
-
-
-def get_note_by_id(db: Session, note_id: str) -> Optional[Note]:
-    return db.query(Note).filter(Note.id == note_id).first()
-
-
-def update_note(
-    db: Session,
-    note_id: str,
-    title: str = None,
-    content: str = None,
-) -> Optional[Note]:
-    note = get_note_by_id(db, note_id)
-    if note:
-        if title is not None:
-            note.title = title
-        if content is not None:
-            note.content = content
-        db.commit()
-        db.refresh(note)
-    return note
-
-
-def delete_note(db: Session, note_id: str) -> bool:
-    note = get_note_by_id(db, note_id)
-    if note:
-        db.delete(note)
-        db.commit()
-        return True
-    return False
 
 
 # ── EmailSummary ─────────────────────────────────────────────────────────

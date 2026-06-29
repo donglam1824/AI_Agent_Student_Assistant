@@ -14,19 +14,25 @@ export function useEmailNotifications(): UseEmailNotificationsResult {
 
   useEffect(() => {
     // Chỉ kết nối khi có token trong localStorage (đã đăng nhập)
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("orca_token");
     if (!token) return;
 
     let eventSource: EventSource | null = null;
     let reconnectTimeout: NodeJS.Timeout;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
 
     const connectSSE = () => {
       // Vì EventSource mặc định không gửi headers custom (như Authorization),
-      // nên trong thực tế cần pass token qua query params, hoặc dùng custom fetch (ví dụ fetch-event-source)
-      // Ở đây ta mô phỏng kết nối SSE với url backend (nếu BE config cookie auth)
-      const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/email/notifications/stream?token=${token}`;
+      // nên pass token qua query params
+      const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/email/notifications/stream?token=${token}`;
       
       eventSource = new EventSource(sseUrl);
+
+      eventSource.onopen = () => {
+        // Reset reconnect counter on successful connection
+        reconnectAttempts = 0;
+      };
 
       eventSource.onmessage = (event) => {
         try {
@@ -45,13 +51,22 @@ export function useEmailNotifications(): UseEmailNotificationsResult {
         }
       };
 
-      eventSource.onerror = (error) => {
-        console.error("SSE error, attempting to reconnect...", error);
+      eventSource.onerror = () => {
         if (eventSource) {
           eventSource.close();
         }
-        // Thử kết nối lại sau 5 giây
-        reconnectTimeout = setTimeout(connectSSE, 5000);
+
+        reconnectAttempts++;
+        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+          // Exponential backoff: 2s, 4s, 8s, 16s, 32s
+          const delay = Math.min(2000 * Math.pow(2, reconnectAttempts - 1), 32000);
+          console.warn(
+            `SSE disconnected. Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`
+          );
+          reconnectTimeout = setTimeout(connectSSE, delay);
+        } else {
+          console.warn("SSE: Max reconnect attempts reached. Stopping.");
+        }
       };
     };
 

@@ -16,6 +16,8 @@ from core.llm_manager import llm_manager
 from core.logger import logger
 from tools.note.list_notes import list_notes
 from tools.note.create_note import create_note
+from tools.note.update_note import update_note
+from tools.note.delete_note import delete_note
 
 SYSTEM_PROMPT = """Bạn là trợ lý ghi chú học tập thông minh dành cho sinh viên.
 Bạn giúp sinh viên ghi chép, quản lý và tra cứu các ghi chú liên quan đến việc học.
@@ -26,14 +28,18 @@ Hướng dẫn:
 - Khi cần thao tác ghi chú, hãy sử dụng các tool được cung cấp.
 - Khi người dùng muốn xem ghi chú, hãy dùng list_notes.
 - Khi người dùng muốn lưu thông tin (bài giảng, deadline, bài tập, ý tưởng), hãy dùng create_note.
+- Khi người dùng muốn sửa, hãy dùng update_note.
+- Khi người dùng muốn xóa, hãy dùng delete_note.
 - Tự động đặt tiêu đề ghi chú rõ ràng nếu người dùng không đề cập (ví dụ: "Ghi chú môn Toán – 22/04").
-- Luôn xác nhận lại với người dùng sau khi tạo ghi chú.
+- Luôn xác nhận lại với người dùng sau khi tạo/sửa/xóa ghi chú.
 - Thời gian hiện tại: {current_time}
 """
 
 NOTE_TOOLS = [
     list_notes,
     create_note,
+    update_note,
+    delete_note,
 ]
 
 

@@ -43,7 +43,7 @@ class User(Base):
     # Relationships
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
-    notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+
     email_summaries = relationship("EmailSummary", back_populates="user", cascade="all, delete-orphan")
     email_preference = relationship("EmailPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
@@ -108,19 +108,7 @@ class Document(Base):
     user = relationship("User", back_populates="documents")
 
 
-class Note(Base):
-    """Ghi chú học tập – lưu trữ cục bộ trong SQLite."""
-    __tablename__ = "notes"
 
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    title = Column(String, nullable=False)
-    content = Column(Text, nullable=False, default="")
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
-
-    # Relationships
-    user = relationship("User", back_populates="notes")
 
 
 class EmailSummary(Base):

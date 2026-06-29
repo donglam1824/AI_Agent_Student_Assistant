@@ -10,20 +10,21 @@ Note management endpoints:
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db import crud
 from db.models import User
 from api.deps import get_current_user
 from core.logger import logger
+from services.base_note_service import get_note_service
+from models.note import NoteItem
 
 router = APIRouter(prefix="/notes", tags=["Notes"])
 
 
-# ── Request / Response Models ─────────────────────────────────────────────
+# ── Request Models ────────────────────────────────────────────────────────
 
 class NoteCreateRequest(BaseModel):
     title: str
@@ -35,85 +36,84 @@ class NoteUpdateRequest(BaseModel):
     content: Optional[str] = None
 
 
-class NoteResponse(BaseModel):
-    id: str
-    title: str
-    content: str
-    created_at: str
-    updated_at: str
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
-@router.get("", response_model=list[NoteResponse])
+@router.get("", response_model=list[NoteItem])
 async def list_notes(
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    """List all notes for the current user."""
-    notes = crud.get_user_notes(db, current_user.id, limit=limit)
-    return [
-        NoteResponse(
-            id=n.id,
-            title=n.title,
-            content=n.content,
-            created_at=n.created_at.isoformat(),
-            updated_at=n.updated_at.isoformat(),
+    """List all notes for the current user from Google Tasks."""
+    try:
+        service = get_note_service(current_user)
+        return await service.list_notes(limit=limit)
+    except ValueError as e:
+        logger.error(f"Credential error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vui lòng liên kết tài khoản Google để sử dụng tính năng ghi chú."
         )
-        for n in notes
-    ]
+    except Exception as e:
+        logger.error(f"Error listing notes: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("", response_model=NoteResponse, status_code=201)
+@router.post("", response_model=NoteItem, status_code=201)
 async def create_note(
     body: NoteCreateRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    """Create a new note."""
-    note = crud.create_note(db, user_id=current_user.id, title=body.title, content=body.content)
-    return NoteResponse(
-        id=note.id,
-        title=note.title,
-        content=note.content,
-        created_at=note.created_at.isoformat(),
-        updated_at=note.updated_at.isoformat(),
-    )
+    """Create a new note in Google Tasks."""
+    try:
+        service = get_note_service(current_user)
+        return await service.create_note(title=body.title, content=body.content)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vui lòng liên kết tài khoản Google để sử dụng tính năng ghi chú."
+        )
+    except Exception as e:
+        logger.error(f"Error creating note: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{note_id}", response_model=NoteResponse)
+@router.put("/{note_id}", response_model=NoteItem)
 async def update_note(
     note_id: str,
     body: NoteUpdateRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    """Update a note."""
-    note = crud.get_note_by_id(db, note_id)
-    if not note or note.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Ghi chú không tồn tại.")
-
-    updated = crud.update_note(db, note_id, title=body.title, content=body.content)
-    return NoteResponse(
-        id=updated.id,
-        title=updated.title,
-        content=updated.content,
-        created_at=updated.created_at.isoformat(),
-        updated_at=updated.updated_at.isoformat(),
-    )
+    """Update a note in Google Tasks."""
+    try:
+        service = get_note_service(current_user)
+        return await service.update_note(note_id, title=body.title, content=body.content)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vui lòng liên kết tài khoản Google để sử dụng tính năng ghi chú."
+        )
+    except Exception as e:
+        logger.error(f"Error updating note: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{note_id}")
 async def delete_note(
     note_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    """Delete a note."""
-    note = crud.get_note_by_id(db, note_id)
-    if not note or note.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Ghi chú không tồn tại.")
-
-    crud.delete_note(db, note_id)
-    return {"message": "Đã xóa ghi chú."}
+    """Delete a note in Google Tasks."""
+    try:
+        service = get_note_service(current_user)
+        success = await service.delete_note(note_id)
+        if not success:
+            raise HTTPException(status_code=400, detail="Xóa ghi chú thất bại.")
+        return {"message": "Đã xóa ghi chú."}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vui lòng liên kết tài khoản Google để sử dụng tính năng ghi chú."
+        )
+    except Exception as e:
+        logger.error(f"Error deleting note: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
