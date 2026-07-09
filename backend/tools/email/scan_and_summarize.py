@@ -56,7 +56,7 @@ def _format_time(received_date_time: str) -> str:
 @tool
 def scan_and_summarize_emails(
     source: str = "all",
-    limit: int = 10,
+    limit: int = 50,
     config: RunnableConfig = None,
 ) -> str:
     """

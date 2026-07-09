@@ -66,7 +66,7 @@ class EmailSummaryResponse(BaseModel):
 
 @router.get("/inbox", response_model=list[EmailItem])
 async def get_inbox(
-    limit: int = 10,
+    limit: int = 50,
     source: str = "all",
     current_user: User = Depends(get_current_user),
 ):

@@ -74,7 +74,7 @@ class GoogleEmailService(BaseEmailService):
         self._user_id = user_id
         logger.info(f"[Google Email] Gmail service ready for user={user_id}")
 
-    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]:
+    async def list_emails(self, limit: int = 50, source: Optional[str] = None) -> List[EmailMessage]:
         _ = source
         logger.info(f"[Google Email] user={self._user_id} fetching {limit} emails")
         try:

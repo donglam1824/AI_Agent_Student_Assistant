@@ -16,7 +16,7 @@ from core.logger import logger
 @tool
 def list_emails(
     source: str = "all",
-    limit: int = 5,
+    limit: int = 50,
     academic_only: bool = True,
     config: RunnableConfig = None,
 ) -> str:

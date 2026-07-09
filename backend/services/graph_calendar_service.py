@@ -112,7 +112,9 @@ class GraphCalendarService(BaseCalendarService):
             .get(request_configuration=lambda cfg: setattr(
                 cfg.query_parameters, "start_date_time",
                 start.isoformat()
-            ) or setattr(cfg.query_parameters, "end_date_time", end.isoformat()))
+            ) or setattr(cfg.query_parameters, "end_date_time", end.isoformat()) or setattr(
+                cfg.query_parameters, "top", 50
+            ))
         )
         events = []
         if result and result.value:

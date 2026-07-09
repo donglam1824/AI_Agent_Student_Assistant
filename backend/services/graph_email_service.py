@@ -17,7 +17,7 @@ from core.logger import logger
 
 class BaseEmailService(ABC):
     @abstractmethod
-    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]: ...
+    async def list_emails(self, limit: int = 50, source: Optional[str] = None) -> List[EmailMessage]: ...
 
     @abstractmethod
     async def send_email(self, data: EmailCreate) -> bool: ...
@@ -42,7 +42,7 @@ class MockEmailService(BaseEmailService):
             )
         )
 
-    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]:
+    async def list_emails(self, limit: int = 50, source: Optional[str] = None) -> List[EmailMessage]:
         _ = source
         logger.debug(f"[Mock Email] Listing emails: limit={limit}")
         return self._store[:limit]
@@ -100,7 +100,7 @@ class GraphEmailService(BaseEmailService):
             response.raise_for_status()
         return response
 
-    async def list_emails(self, limit: int = 5, source: Optional[str] = None) -> List[EmailMessage]:
+    async def list_emails(self, limit: int = 50, source: Optional[str] = None) -> List[EmailMessage]:
         _ = source
         if self._local_user_id:
             logger.info(f"[Graph Email] Fetching {limit} delegated emails")
